@@ -5,6 +5,22 @@
   let communityLimit = PAGE, busy = false;
   const previews = new Map();
   const $ = id => document.getElementById(id);
+  const canUploadCrew = () => !!signedIn && getPerms(signedIn.role).crewPhotos;
+  const crewUpload = $('crewPhotoForm').closest('details');
+  const crewNotice = document.createElement('p');
+  crewNotice.className = 'gallery-permission-note';
+  crewNotice.textContent = 'Only the Owner can add crew photos. Sign in through the Crew panel.';
+  crewUpload.before(crewNotice);
+  function updateCrewPermission() {
+    const allowed = canUploadCrew();
+    crewUpload.hidden = !allowed;
+    crewUpload.style.display = allowed ? '' : 'none';
+    crewNotice.hidden = allowed;
+    if (!allowed) crewUpload.open = false;
+    crewUpload.querySelectorAll('input,select,textarea,button').forEach(control => control.disabled = !allowed);
+  }
+  document.addEventListener('gw-permissions-changed', updateCrewPermission);
+  updateCrewPermission();
   async function request(path, options = {}) {
     const response = await fetch(API + path, {...options, headers: {apikey: KEY, ...options.headers}});
     if (!response.ok) {
@@ -80,6 +96,7 @@
     });
     form.addEventListener('submit',async event=>{
       event.preventDefault();const button=form.querySelector('button[type=submit]');if(button.disabled)return;
+      if(kind==='crew' && !canUploadCrew()){status.textContent='Only the Owner can add crew photos.';return;}
       const file=fileInput.files[0];if(!file){status.textContent='Choose a picture first.';return;}
       const person=kind==='crew'?STATE.roster.find(p=>p.id===$('crewPhotoMember').value):null;
       const author=person?person.name:$('communityPhotoName').value.trim();
@@ -88,18 +105,20 @@
       try {
         if(!pending){
           const blob=await compress(file), id=crypto.randomUUID(), path=kind+'/'+id+'.jpg';
+          if(kind==='crew' && !canUploadCrew()) throw new Error('Owner permission is required.');
           status.textContent='Uploading photo…';
           await request('/storage/v1/object/gw-gallery/'+path,{method:'POST',headers:{'Content-Type':'image/jpeg','x-upsert':'false'},body:blob});
           pending={id,object_path:path};
         }
         status.textContent='Adding to the gallery…';
+        if(kind==='crew' && !canUploadCrew()) throw new Error('Owner permission is required.');
         await request('/rest/v1/gallery_photos',{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({...pending,gallery:kind,author,crew_id:person?.id||null,caption:$(kind+'PhotoCaption').value.trim()})});
         pending=null;form.reset();preview.hidden=true;preview.removeAttribute('src');
         if(previews.has(kind)){URL.revokeObjectURL(previews.get(kind));previews.delete(kind);}
         status.textContent='Your photo is live! Everyone can see it in the gallery.';
         await loadGalleries();
       } catch(error){status.textContent='Photo was not published. '+error.message+' You can retry.';}
-      finally{button.disabled=false;}
+      finally{button.disabled=kind==='crew' && !canUploadCrew();}
     });
   }
   STATE.roster.forEach(person=>{const option=document.createElement('option');option.value=person.id;option.textContent=person.name+' · '+person.role;$('crewPhotoMember').append(option);});
