@@ -39,3 +39,5 @@ Uploads accept JPG, PNG and WebP up to 10 MB and convert them to JPEG up to 1200
 
 
 Crew photo permission: the website interface allows uploads only when the signed-in role is Owner. This is a local PIN-based interface restriction, not database authorization; the existing public Supabase upload policy remains unchanged. Secure enforcement requires authenticated identities and corresponding database/storage policies.
+
+Owner category editor: Admin > Menu categories allows adding categories and removing them after choosing a destination for existing items. The last category cannot be removed. Categories persist in local browser storage; this does not publish menu changes to other visitors.

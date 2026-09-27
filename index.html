@@ -131,13 +131,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   <div class="section-head"><h2>The Menu</h2><span class="sub" id="count"></span></div>
   <div class="tools">
     <input id="search" placeholder="Search the menu…">
-    <button class="chip active" data-cat="All">All</button>
+    <span id="categoryFilters" style="display:contents"><button class="chip active" data-cat="All">All</button>
     <button class="chip" data-cat="Vape">Vape</button>
     <button class="chip" data-cat="Bong">Bong</button>
     <button class="chip" data-cat="Exclusive Items">Exclusive</button>
     <button class="chip" data-cat="Joint">Joint</button>
     <button class="chip" data-cat="Bundle Deals">Bundle Deals</button>
-    <button class="chip" data-cat="Accessories">Accessories</button>
+    <button class="chip" data-cat="Accessories">Accessories</button></span>
   </div>
   <div class="grid" id="grid"></div>
   <p class="empty" id="empty" style="display:none">Nothing matches your search.</p>
@@ -214,6 +214,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
       <p id="contentMsg" class="msg" role="status"></p>
     </form>
   </div>
+  <div id="categoryBlock" hidden>
+  <h3>Menu categories · Owner only</h3>
+  <p>Organize your menu. Before removing a category, choose where its items should go.</p>
+  <div class="row"><input id="newCategory" maxlength="40" placeholder="New category name" aria-label="New category name"><button type="button" class="btn" id="addCategory">Add category</button></div>
+  <div id="categoryRows"></div><p class="msg" id="categoryMsg" role="status"></p>
+  </div>
   <div id="menuBlock">
   <h3 style="font-size:1.1rem;margin-bottom:10px">Menu</h3>
   <div id="menuRows"></div>
@@ -276,9 +282,9 @@ const PERMS = [["menu","Edit menu"],["roster","Edit roster & codes"],["roles","E
 function ensureRoles(){ if(!Array.isArray(STATE.roles)) STATE.roles = [{name:"Owner",perms:{menu:true,roster:true,roles:true,reports:true,sell:true,clock:true}}]; }
 function getPerms(roleName){
   const r = STATE.roles.find(x=>x.name===roleName);
-  return {...(r ? r.perms : {menu:false,roster:false,roles:false,reports:false,sell:false,clock:false}),crewPhotos: !!r && roleName.trim().toLowerCase()==='owner'};
+  return {...(r ? r.perms : {menu:false,roster:false,roles:false,reports:false,sell:false,clock:false}),categories: !!r && roleName.trim().toLowerCase()==='owner',crewPhotos: !!r && roleName.trim().toLowerCase()==='owner'};
 }
-const CATS = ["Vape","Bong","Exclusive Items","Joint","Bundle Deals","Accessories"];
+const DEFAULT_CATS = ["Vape","Bong","Exclusive Items","Joint","Bundle Deals","Accessories"];
 const ICONS = {"Vape":'<path d="M6 15h9a3 3 0 0 0 0-6H8a3 3 0 0 1 0-6" stroke="currentColor" stroke-width="1.3" fill="none"/>',"Bong":'<path d="M9 3v6l-3 8a2 2 0 0 0 2 3h8a2 2 0 0 0 2-3l-3-8V3" stroke="currentColor" stroke-width="1.3" fill="none"/>',"Exclusive Items":'<path d="M12 2l2.5 6.5L21 9l-5 4.5L17.5 21 12 17l-5.5 4L8 13.5 3 9l6.5-.5z" stroke="currentColor" stroke-width="1.1" fill="none"/>',"Joint":'<path d="M3 12h15a3 3 0 0 1 0 6H3z" stroke="currentColor" stroke-width="1.3" fill="none"/>',"Bundle Deals":'<path d="M4 8l8-4 8 4-8 4-8-4z" stroke="currentColor" stroke-width="1.1" fill="none"/><path d="M4 8v8l8 4 8-4V8" stroke="currentColor" stroke-width="1.1" fill="none"/>',"Accessories":'<circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.1" fill="none"/><path d="M12 8v4l3 2" stroke="currentColor" stroke-width="1.1"/>'};
 
 const STORAGE_KEY = "green-wonderland-local-v1";
@@ -288,6 +294,8 @@ try {
   if(saved && ['menu','roster','roles','sales','clock'].every(k=>Array.isArray(saved[k]))) STATE=saved;
 } catch(e) { console.warn('Saved data unavailable; using the included catalog.'); }
 ensureRoles();
+STATE.categories = [...new Set([...(Array.isArray(STATE.categories) ? STATE.categories : DEFAULT_CATS), ...STATE.menu.map(item=>item.category)].filter(c=>typeof c==='string' && c.trim() && c!=='All'))];
+const CATS = STATE.categories;
 let activeCat = 'All';
 let canEditPage = false;
 let signedIn = null;
@@ -303,6 +311,9 @@ function msgFor(r){ return r.ok ? 'Saved in this browser.' : 'Could not save: '+
 function escapeHtml(value){ return String(value).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function renderMenu(){
+  const chips=document.getElementById('categoryFilters');
+  chips.innerHTML=['All',...CATS].map(c=>'<button class="chip'+(activeCat===c?' active':'')+'" data-cat="'+escapeHtml(c)+'">'+escapeHtml(c)+'</button>').join('');
+  chips.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{activeCat=c.dataset.cat;renderMenu();}));
   const q = document.getElementById('search').value.trim().toLowerCase();
   const filtered = STATE.menu.filter(it=> (activeCat==='All'||it.category===activeCat) && (!q||it.name.toLowerCase().includes(q)));
   document.getElementById('count').textContent = filtered.length+' item'+(filtered.length===1?'':'s');
@@ -312,7 +323,6 @@ function renderMenu(){
   grid.innerHTML = filtered.map(it=>`<div class="card">${it.photo?`<div class="product-media"><img class="photo" src="${escapeHtml(it.photo)}" alt="${escapeHtml(it.name)}" loading="lazy"></div>`:`<div class="product-media illustrated"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[it.category]||''}</svg><span>${escapeHtml(it.category)}</span></div>`}<h3>${escapeHtml(it.name)}</h3><div class="cat">${escapeHtml(it.category)}</div>${it.description?`<p class="product-description">${escapeHtml(it.description)}</p>`:''}<div class="price">$${Number(it.price).toFixed(2)}</div></div>`).join('');
 }
 document.getElementById('search').addEventListener('input', renderMenu);
-document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');activeCat=c.dataset.cat;renderMenu();}));
 
 function renderStaffGrid(){
   document.getElementById('staffgrid').innerHTML = STATE.roster.map(p=>`<div class="staff${signedIn&&p.id===signedIn.id?' you':''}"><div class="avatar">${p.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div><div>${escapeHtml(p.name)}</div><div class="role">${escapeHtml(p.role)}</div></div>`).join('');
@@ -459,7 +469,7 @@ function readImageCompressed(file, maxSize){
   });
 }
 function renderMenuAdmin(){
-  document.getElementById('menuRows').innerHTML = STATE.menu.map((it,i)=>`<div class="rrow" data-i="${i}">${it.photo?`<img class="me-thumb" src="${escapeHtml(it.photo)}">`:'<span class="me-thumb" style="display:inline-block"></span>'}<input type="text" class="me-name" value="${escapeHtml(it.name)}"><input type="number" class="me-price" value="${it.price}" step="0.01" style="width:80px"><select class="me-cat">${CATS.map(c=>`<option ${c===it.category?'selected':''}>${c}</option>`).join('')}</select><input type="file" accept="image/*" class="me-photoInput"><button class="btn small me-remove">Remove</button></div>`).join('');
+  document.getElementById('menuRows').innerHTML = STATE.menu.map((it,i)=>`<div class="rrow" data-i="${i}">${it.photo?`<img class="me-thumb" src="${escapeHtml(it.photo)}">`:'<span class="me-thumb" style="display:inline-block"></span>'}<input type="text" class="me-name" value="${escapeHtml(it.name)}"><input type="number" class="me-price" value="${it.price}" step="0.01" style="width:80px"><select class="me-cat">${CATS.map(c=>`<option ${c===it.category?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select><input type="file" accept="image/*" class="me-photoInput"><button class="btn small me-remove">Remove</button></div>`).join('');
   document.getElementById('menuRows').querySelectorAll('.rrow').forEach(row=>{
     const i=+row.dataset.i;
     row.querySelector('.me-name').addEventListener('input',e=>STATE.menu[i].name=e.target.value);
@@ -474,7 +484,7 @@ function renderMenuAdmin(){
     row.querySelector('.me-remove').addEventListener('click',()=>{STATE.menu.splice(i,1);renderMenuAdmin();});
   });
 }
-document.getElementById('mCat').innerHTML = CATS.map(c=>`<option>${c}</option>`).join('');
+document.getElementById('mCat').innerHTML = CATS.map(c=>`<option>${escapeHtml(c)}</option>`).join('');
 let pendingPhoto = null;
 document.getElementById('mPhoto').addEventListener('change', async e=>{
   const file = e.target.files[0];
@@ -557,7 +567,9 @@ document.getElementById('saveRoster').addEventListener('click', async ()=>{
 async function initPerms(){
   document.dispatchEvent(new Event('gw-permissions-changed'));
   const perms = signedIn ? getPerms(signedIn.role) : {menu:false,roster:false,roles:false,reports:false,sell:false,clock:false};
-  canEditPage = !!(canEditDescriptions()||perms.menu||perms.roster||perms.roles||perms.reports);
+  document.getElementById('categoryBlock').hidden = !perms.categories;
+  if(perms.categories && typeof renderCategoryAdmin==='function') renderCategoryAdmin();
+  canEditPage = !!(perms.categories||canEditDescriptions()||perms.menu||perms.roster||perms.roles||perms.reports);
   document.getElementById("contentBlock").hidden = !canEditDescriptions();
   if(canEditDescriptions()) renderDescriptionEditor();
   document.getElementById('admin').style.display = canEditPage ? 'block' : 'none';
@@ -630,6 +642,7 @@ renderMenu(); renderStaffGrid(); renderCrewPanel(); initPerms();
 updateAttendanceTimes();
 setInterval(updateAttendanceTimes,1000);
 </script>
+<script src="categories.js?v=1" defer></script>
 <script src="gallery.js?v=owner-permission-1" defer></script>
 </body>
 </html>
