@@ -37,3 +37,5 @@ Crew Gallery shows the latest uploaded portrait for each listed crew member. Com
 
 Uploads accept JPG, PNG and WebP up to 10 MB and convert them to JPEG up to 1200 pixels, capped at 1 MB in storage. Public upload endpoints consume your free storage quota; monitor usage in Supabase. The rest of the website (sales, attendance, admin content, roster and roles) remains browser-local. gallery-setup.sql documents the database setup already applied; do not rerun it on the existing project.
 
+
+Crew photo permission: the website interface allows uploads only when the signed-in role is Owner. This is a local PIN-based interface restriction, not database authorization; the existing public Supabase upload policy remains unchanged. Secure enforcement requires authenticated identities and corresponding database/storage policies.
