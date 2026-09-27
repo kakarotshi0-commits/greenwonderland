@@ -31,3 +31,9 @@ Sign in and open Admin > Website descriptions. Owners, Admin/Administrator roles
 ## Shift timing
 The crew panel shows the current shift in HH:MM:SS, updating every second, plus cumulative time and shift count. After clock-out it shows the last shift duration. Reports include per-person totals and active shift time. Timing is calculated from saved clock events, so reloading does not reset a shift. Closing the page or signing out does not clock out; use Clock out to finish the shift.
 
+
+## Shared galleries
+Crew Gallery shows the latest uploaded portrait for each listed crew member. Community Gallery lets any visitor share a picture, display name and caption. Both galleries store photos in the Supabase gw-gallery bucket and metadata in gallery_photos, so pictures are visible across devices. Visitors can submit photos but cannot overwrite or delete existing database rows or image files. Display names and crew selections are self-reported, not authenticated identities. Manage unwanted records through the Supabase Table Editor and corresponding image files through Storage.
+
+Uploads accept JPG, PNG and WebP up to 10 MB and convert them to JPEG up to 1200 pixels, capped at 1 MB in storage. Public upload endpoints consume your free storage quota; monitor usage in Supabase. The rest of the website (sales, attendance, admin content, roster and roles) remains browser-local. gallery-setup.sql documents the database setup already applied; do not rerun it on the existing project.
+
