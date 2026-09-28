@@ -20,7 +20,7 @@ function renderCategoryAdmin() {
       if(items.length && (!target.value || target.value===category || !CATS.includes(target.value))){message.textContent='Choose a destination for the items first.';return;}
       const previous=[...CATS];items.forEach(item=>item.category=target.value);
       CATS.splice(CATS.indexOf(category),1);
-      const result=await publishState();
+      const result=await publishState({catalog:true});
       if(!result.ok){CATS.splice(0,CATS.length,...previous);items.forEach(item=>item.category=category);message.textContent=msgFor(result);return;}
       if(activeCat===category)activeCat='All';
       refreshCategories();message.textContent='Category removed. Items kept. '+msgFor(result);
@@ -39,7 +39,7 @@ document.getElementById('addCategory').addEventListener('click',async()=>{
   const input=document.getElementById('newCategory'),name=input.value.trim(),message=document.getElementById('categoryMsg');
   if(!name || name.length>40){message.textContent='Enter a category name of 1–40 characters.';return;}
   if(name.toLowerCase()==='all' || CATS.some(c=>c.toLowerCase()===name.toLowerCase())){message.textContent='That category already exists or is reserved.';return;}
-  CATS.push(name);const result=await publishState();
+  CATS.push(name);const result=await publishState({catalog:true});
   if(!result.ok){CATS.pop();message.textContent=msgFor(result);return;}
   input.value='';refreshCategories();message.textContent='Category added. '+msgFor(result);
 });
