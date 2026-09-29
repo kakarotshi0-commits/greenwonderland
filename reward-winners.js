@@ -91,21 +91,15 @@
     if (!can()) return;
     var body = h('div', { class: 'gwrw-body' }), onlyWaiting = false;
     openModal('Reward claims', body);
-    if (pass) load(); else askPass('');
+    pass = ''; load();
 
-    function askPass(text) {
-      var pin = h('input', { class: 'gwrw-input', type: 'password', placeholder: 'Staff passphrase', 'aria-label': 'Staff passphrase', autocomplete: 'off' });
-      function submit() { pass = pin.value; load(); }
-      pin.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    function showError(text) {
       body.textContent = '';
-      body.appendChild(h('div', null, h('p', null, 'Enter the staff passphrase to see the reward claims.'),
-        h('div', { class: 'gwrw-row' }, pin, h('button', { class: 'gwrw-primary', onclick: submit }, 'Unlock')),
-        h('p', { class: 'gwrw-msg gwrw-err' }, text)));
-      pin.focus();
+      body.appendChild(h('p', { class: 'gwrw-msg gwrw-err' }, text));
     }
     function load() {
       body.textContent = 'Loading\u2026';
-      rpc('rw_claims_list', { p_pin: pass }).then(render).catch(function (e) { pass = null; askPass(e.message); });
+      rpc('rw_claims_list', { p_pin: pass }).then(render).catch(function (e) { showError(e.message); });
     }
     function render(res) {
       var rows = res.claims || [];
@@ -131,19 +125,6 @@
           h('td', null, toggle));
       });
 
-      var setPass = null;
-      if (res.role === 'admin') {
-        var np = h('input', { class: 'gwrw-input', type: 'password', placeholder: 'New staff passphrase (8+ characters)', 'aria-label': 'New staff passphrase', autocomplete: 'off' });
-        var nm = h('p', { class: 'gwrw-msg', 'aria-live': 'polite' });
-        setPass = h('div', null, h('h3', null, 'Staff passphrase'),
-          h('p', { class: 'gwrw-hint' }, 'Give this passphrase to your employees so they can open Reward claims.'),
-          h('div', { class: 'gwrw-row' }, np, h('button', { class: 'gwrw-btn', onclick: function () {
-            rpc('rw_admin_set_staff_pin', { p_pin: pass, p_new: np.value }).then(function () {
-              np.value = ''; nm.className = 'gwrw-msg gwrw-win'; nm.textContent = 'Staff passphrase saved.';
-            }).catch(function (e) { nm.className = 'gwrw-msg gwrw-err'; nm.textContent = e.message; });
-          } }, 'Save')), nm);
-      }
-
       body.textContent = '';
       body.appendChild(h('div', null,
         h('p', { class: 'gwrw-hint' }, 'These details are private to employees. Press Mark as given after you hand the reward to the winner.'),
@@ -153,7 +134,7 @@
               h('thead', null, h('tr', null, h('th', null, 'In-game name'), h('th', null, 'CID'), h('th', null, 'Phone'), h('th', null, 'Reward'), h('th', null, 'Won'), h('th', null, 'Status'), h('th'))),
               h('tbody', null, trs)))
           : h('p', { class: 'gwrw-hint' }, rows.length ? 'Nothing is waiting.' : 'No wheel spins yet.'),
-        msg, setPass));
+        msg));
     }
   }
 
