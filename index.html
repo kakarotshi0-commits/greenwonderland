@@ -296,7 +296,7 @@ const STORAGE_KEY = "green-wonderland-local-v1";
 let STATE = JSON.parse(document.getElementById('gw-state').textContent);
 try {
   const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-  if(saved && Array.isArray(saved.sales) && Array.isArray(saved.clock)){ STATE.sales=saved.sales; STATE.clock=saved.clock; }
+  /* sales and attendance now live in the shared database (sales-sync.js), not this browser */
   if(saved && Array.isArray(saved.roles) && saved.roles.length && STATE.roster.every(p=>saved.roles.some(r=>r && r.name===p.role))) STATE.roles = saved.roles;
 } catch(e) { console.warn('Saved data unavailable; using the included catalog.'); }
 ensureRoles();
@@ -311,7 +311,7 @@ try{ const sid = sessionStorage.getItem('gw_local_signed_in'); if(sid) signedIn 
 
 let gwFindPerson = async pin => STATE.roster.find(p=>p.pin===pin) || null;
 async function publishState(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); return {ok:true}; }
+  try{ const {sales, clock, ...rest} = STATE; localStorage.setItem(STORAGE_KEY, JSON.stringify(rest)); return {ok:true}; }
   catch(e){ return {ok:false, reason:'Browser storage is full or unavailable. Export a backup before closing.'}; }
 }
 function msgFor(r){ return r.ok ? 'Saved in this browser.' : 'Could not save: '+r.reason; }
@@ -656,6 +656,7 @@ setInterval(updateAttendanceTimes,1000);
 <script src="owner-recovery.js?v=1" defer></script>
 <script src="gallery.js?v=owner-permission-1" defer></script>
 <script src="animations.js" defer></script>
+<script src="sales-sync.js?v=1" defer></script>
 <script src="reward-wheel.js?v=8"></script>
 <script>
   var GW_URL = 'https://wtiefpuczygmyjaampdg.supabase.co';
