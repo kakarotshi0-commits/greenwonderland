@@ -649,35 +649,49 @@ setInterval(updateAttendanceTimes,1000);
 <script src="gallery.js?v=owner-permission-1" defer></script>
 <script src="reward-wheel.js"></script>
 <script>
+  var GW_URL = 'https://wtiefpuczygmyjaampdg.supabase.co';
+  var GW_KEY = 'sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif';
+
   RewardWheel.init({
-    supabaseUrl: 'https://wtiefpuczygmyjaampdg.supabase.co',
-    supabaseKey: 'sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif',
+    supabaseUrl: GW_URL,
+    supabaseKey: GW_KEY,
     canManage: function () {
       return !!signedIn && ['owner', 'admin', 'administrator'].includes(String(signedIn.role).toLowerCase());
     }
   });
 
-  // After a sale: create a wheel code and, if the sale qualifies, add it to the invoice.
+  // After a sale: create the customer's wheel code and add it to the invoice automatically.
   var gwSeenSales = STATE.sales.length;
   document.getElementById('completeSale').addEventListener('click', function () {
     if (STATE.sales.length <= gwSeenSales) return;
     var sale = STATE.sales[STATE.sales.length - 1];
     gwSeenSales = STATE.sales.length;
-    RewardWheel.onSale({ id: sale.id, employee: sale.employeeName, total: sale.total }).then(function (code) {
-      if (!code) return;
-      var box = document.getElementById('invoiceText');
-      box.textContent += '\n\n**Reward Wheel Code: ' + code + '**\nGood for one spin. Works once.';
-      var btn = document.getElementById('copyInvoice');
-      btn.onclick = async function () {
-        try {
-          await navigator.clipboard.writeText(box.textContent);
-          btn.textContent = 'Copied!';
-          setTimeout(function () { btn.textContent = 'Copy invoice'; }, 1500);
-        } catch (e) {
-          document.getElementById('saleMsg').textContent = 'Copy unavailable. Select the invoice text and copy manually.';
-        }
-      };
-    });
+    var box = document.getElementById('invoiceText');
+    var msg = document.getElementById('saleMsg');
+
+    fetch(GW_URL + '/rest/v1/rpc/rw_issue_code', {
+      method: 'POST',
+      headers: { apikey: GW_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_sale_id: String(sale.id), p_employee: sale.employeeName, p_amount: sale.total })
+    })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) {
+      if (!res.ok) throw new Error((res.j && res.j.message) || 'Request failed');
+      if (res.j && res.j.ok && res.j.code) {
+        box.textContent += '\n\n**Reward Wheel Code: ' + res.j.code + '**\nGood for one spin. Works once.';
+        var btn = document.getElementById('copyInvoice');
+        btn.onclick = async function () {
+          try {
+            await navigator.clipboard.writeText(box.textContent);
+            btn.textContent = 'Copied!';
+            setTimeout(function () { btn.textContent = 'Copy invoice'; }, 1500);
+          } catch (e) { msg.textContent = 'Copy unavailable. Select the invoice text and copy manually.'; }
+        };
+      } else if (res.j && res.j.msg) {
+        msg.textContent = res.j.msg;
+      }
+    })
+    .catch(function (e) { msg.textContent = 'Reward code error: ' + e.message; });
   });
 </script>
 </body>
