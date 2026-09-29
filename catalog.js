@@ -26,26 +26,25 @@
     ready=true;
     if(!force && JSON.stringify(snapshot())!==startingDraft)return;
     if(data && (force || data.revision!==revision))apply(data);
-    notice(data?'Menu synced across browsers.':'Owner: verify your email, then publish the menu from the browser where you made your edits.');
+    notice(data?'Menu synced across browsers.':'Owner: sign in with your code, then publish the menu from the browser where you made your edits.');
     $('publishLocalCatalog').hidden=!!data;
   }
-  async function verifyOwner(){
-    const {data:{session}}=await client.auth.getSession();
-    owner=false;
-    if(session){const result=await client.rpc('is_catalog_owner');owner=result.data===true;}
-    $('catalogAuthStatus').textContent=owner?'Owner verified. Shared saving is enabled.':session?'This email does not have Owner access.':'Verify your Owner email to save changes for everyone.';
-    $('catalogSignOut').hidden=!session;
-    $('catalogAuthForm').hidden=owner;
+  const TOP=['owner','admin','administrator'];
+  const isTop=()=>!!signedIn&&TOP.includes(String(signedIn.role).trim().toLowerCase());
+  function refreshAccess(){
+    owner=isTop()&&!!window.gwPin;
+    $('catalogAuthStatus').textContent=owner?'Signed in as '+signedIn.role+'. Shared saving is enabled.':isTop()?'Sign out and sign in again with your code to save for everyone.':'Sign in as Owner or Admin (Crew section) to save changes for everyone.';
   }
   publishState=async function(options={}){
     if(!options.catalog)return localSave();
     if(!ready)return {ok:false,reason:'Shared menu is still loading or unavailable. Retry shortly.'};
-    if(!owner)return {ok:false,reason:'Verify your Owner email in Shared menu access first. Nothing was published.'};
+    refreshAccess();
+    if(!owner)return {ok:false,reason:'Sign in as Owner or Admin with your code first. Nothing was published.'};
     if(saving)return {ok:false,reason:'A save is already running. Please wait.'};
     saving=true;
     const payload=JSON.parse(JSON.stringify(snapshot()));
     try{
-      const {data,error}=await client.rpc('save_catalog',{p_payload:payload,p_revision:revision});
+      const {data,error}=await client.rpc('save_catalog_pin',{p_pin:window.gwPin,p_payload:payload,p_revision:revision});
       if(error)return {ok:false,reason:error.message};
       revision=data;baseline=JSON.stringify(payload);await localSave();
       $('publishLocalCatalog').hidden=true;notice('Saved online. Other browsers receive this menu automatically.');
@@ -54,16 +53,8 @@
   };
   const oldMessage=msgFor;
   msgFor=result=>result.ok&&result.shared?'Saved online for everyone.':oldMessage(result);
-  $('catalogAuthForm').addEventListener('submit',async event=>{
-    event.preventDefault();const button=$('catalogSendLink');button.disabled=true;
-    try{
-      const {error}=await client.auth.signInWithOtp({email:$('catalogEmail').value.trim(),options:{emailRedirectTo:'https://kakarotshi0-commits.github.io/greenwonderland/'}});
-      $('catalogAuthStatus').textContent=error?error.message:'Check your email and open the verification link in this browser. Then return to Shared menu access.';
-    }finally{button.disabled=false;}
-  });
-  $('catalogSignOut').addEventListener('click',async()=>{await client.auth.signOut();await verifyOwner();});
   $('publishLocalCatalog').addEventListener('click',async()=>{
-    if(!owner){notice('Verify your Owner email first.');return;}
+    refreshAccess();if(!owner){notice('Sign in as Owner or Admin first.');return;}
     if(revision!==0){notice('A shared menu already exists. Reload to view it before editing.');return;}
     const result=await publishState({catalog:true});notice(msgFor(result));if(result.ok)paint();
   });
@@ -71,8 +62,8 @@
     if(JSON.stringify(snapshot())!==baseline && !confirm('Discard unsaved menu edits and load the shared menu?'))return;
     load(true);
   });
-  client.auth.onAuthStateChange(()=>{setTimeout(verifyOwner,0);});
-  verifyOwner();load();
+  window.addEventListener('gw-auth-changed',refreshAccess);
+  refreshAccess();load();
   setInterval(()=>{if(!document.hidden)load();},15000);
   window.addEventListener('focus',()=>load());
 })();
