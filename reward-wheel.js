@@ -275,6 +275,11 @@
           .catch(function (e) { saveBtn.disabled = false; say('gwrw-err', e.message); });
       } }, 'Save settings');
 
+      var codeMsg = h('p', { class: 'gwrw-msg', 'aria-live': 'polite' });
+      function sayCode(t) {
+        codeMsg.className = 'gwrw-msg gwrw-err';
+        codeMsg.textContent = /rw_admin_delete_code/.test(t) ? 'Delete is not set up yet. Run delete-codes.sql once in Supabase.' : t;
+      }
       var list = codes.map(function (c) {
         var status = c.voided ? 'Cancelled' : c.used_at ? 'Used: ' + c.prize_label : 'Unused';
         return h('tr', null,
@@ -283,7 +288,7 @@
           h('td', null, c.claim_name ? c.claim_name + ' \u00b7 CID ' + c.claim_cid + ' \u00b7 ' + c.claim_phone : (c.used_at ? 'Not sent yet' : '-')),
           h('td', null,
             !c.used_at && !c.voided ? h('button', { class: 'gwrw-btn', onclick: function () {
-              rpc('rw_admin_void', { p_pin: adminPin, p_code: c.code }).then(reloadCodes).catch(function (e) { say('gwrw-err', e.message); });
+              rpc('rw_admin_void', { p_pin: adminPin, p_code: c.code }).then(reloadCodes).catch(function (e) { sayCode(e.message); });
             } }, 'Cancel code') : '',
             h('button', { class: 'gwrw-btn', style: 'margin-left:6px', onclick: function () {
               var warn = c.used_at
@@ -293,7 +298,7 @@
               rpc('rw_admin_delete_code', { p_pin: adminPin, p_code: c.code }).then(function () {
                 reloadCodes();
                 if (window.RewardWinners && RewardWinners.refresh) RewardWinners.refresh();
-              }).catch(function (e) { say('gwrw-err', e.message); });
+              }).catch(function (e) { sayCode(e.message); });
             } }, 'Delete')));
       });
 
@@ -304,7 +309,7 @@
         h('p', { class: 'gwrw-hint' }, 'Weight is relative. A reward with weight 30 out of 100 total wins 30% of spins.'),
         h('div', { class: 'gwrw-prize gwrw-cols' }, h('span'), h('span', null, 'Reward'), h('span', null, 'Weight'), h('span', null, 'Chance'), h('span')),
         rows, h('div', { class: 'gwrw-row' }, addBtn, saveBtn), msg,
-        h('h3', null, 'Latest codes'),
+        h('h3', null, 'Latest codes'), codeMsg,
         codes.length ? h('div', { class: 'gwrw-scroll' }, h('table', { class: 'gwrw-table' },
           h('thead', null, h('tr', null, h('th', null, 'Code'), h('th', null, 'Employee'), h('th', null, 'Sale'), h('th', null, 'Created'), h('th', null, 'Status'), h('th', null, 'Player details'), h('th'))),
           h('tbody', null, list))) : h('p', { class: 'gwrw-hint' }, 'No codes yet. One is created when a sale reaches the amount above.')));
