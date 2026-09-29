@@ -1,5 +1,6 @@
 (() => {
   const client=supabase.createClient('https://wtiefpuczygmyjaampdg.supabase.co','sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif');
+  window.gwClient=client;
   const $=id=>document.getElementById(id);
   const snapshot=()=>({menu:STATE.menu,categories:[...CATS],content:STATE.content||{}});
   try { if(!localStorage.getItem("gw-menu-before-sync-v1"))localStorage.setItem("gw-menu-before-sync-v1",JSON.stringify(snapshot())); } catch {}
