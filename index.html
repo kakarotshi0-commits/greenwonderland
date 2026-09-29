@@ -292,7 +292,7 @@ const STORAGE_KEY = "green-wonderland-local-v1";
 let STATE = JSON.parse(document.getElementById('gw-state').textContent);
 try {
   const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-  if(saved && ['menu','roster','roles','sales','clock'].every(k=>Array.isArray(saved[k]))) STATE=saved;
+  if(saved && Array.isArray(saved.sales) && Array.isArray(saved.clock)){ STATE.sales=saved.sales; STATE.clock=saved.clock; }
 } catch(e) { console.warn('Saved data unavailable; using the included catalog.'); }
 ensureRoles();
 STATE.categories = [...new Set([...(Array.isArray(STATE.categories) ? STATE.categories : DEFAULT_CATS), ...STATE.menu.map(item=>item.category)].filter(c=>typeof c==='string' && c.trim() && c!=='All'))];
@@ -643,11 +643,11 @@ renderMenu(); renderStaffGrid(); renderCrewPanel(); initPerms();
 updateAttendanceTimes();
 setInterval(updateAttendanceTimes,1000);
 </script>
-<script src="categories.js?v=2" defer></script>
-<script src="supabase.js" defer></script>
-<script src="catalog.js?v=1" defer></script>
+<script src="categories.js?v=3" defer></script>
+<script src="supabase.js?v=3" defer></script>
+<script src="catalog.js?v=3" defer></script>
 <script src="gallery.js?v=owner-permission-1" defer></script>
-<script src="reward-wheel.js"></script>
+<script src="reward-wheel.js?v=3"></script>
 <script>
   var GW_URL = 'https://wtiefpuczygmyjaampdg.supabase.co';
   var GW_KEY = 'sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif';
@@ -693,7 +693,7 @@ setInterval(updateAttendanceTimes,1000);
     })
     .catch(function (e) { msg.textContent = 'Reward code error: ' + e.message; });
   });
-</script><script src="reward-winners.js"></script>
+</script><script src="reward-winners.js?v=3"></script>
 <script>
   RewardWinners.init({
     supabaseUrl: 'https://wtiefpuczygmyjaampdg.supabase.co',
