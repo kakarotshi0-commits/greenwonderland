@@ -281,9 +281,20 @@
           h('td', { class: 'gwrw-mono' }, c.code), h('td', null, c.employee || '-'), h('td', null, money(c.amount)),
           h('td', null, new Date(c.created_at).toLocaleString()), h('td', null, status),
           h('td', null, c.claim_name ? c.claim_name + ' \u00b7 CID ' + c.claim_cid + ' \u00b7 ' + c.claim_phone : (c.used_at ? 'Not sent yet' : '-')),
-          h('td', null, !c.used_at && !c.voided ? h('button', { class: 'gwrw-btn', onclick: function () {
-            rpc('rw_admin_void', { p_pin: adminPin, p_code: c.code }).then(reloadCodes).catch(function (e) { say('gwrw-err', e.message); });
-          } }, 'Cancel code') : ''));
+          h('td', null,
+            !c.used_at && !c.voided ? h('button', { class: 'gwrw-btn', onclick: function () {
+              rpc('rw_admin_void', { p_pin: adminPin, p_code: c.code }).then(reloadCodes).catch(function (e) { say('gwrw-err', e.message); });
+            } }, 'Cancel code') : '',
+            h('button', { class: 'gwrw-btn', style: 'margin-left:6px', onclick: function () {
+              var warn = c.used_at
+                ? 'Delete ' + c.code + '? It was already used, so the winner record and player details are deleted too. This cannot be undone.'
+                : 'Delete ' + c.code + '? This cannot be undone.';
+              if (!window.confirm(warn)) return;
+              rpc('rw_admin_delete_code', { p_pin: adminPin, p_code: c.code }).then(function () {
+                reloadCodes();
+                if (window.RewardWinners && RewardWinners.refresh) RewardWinners.refresh();
+              }).catch(function (e) { say('gwrw-err', e.message); });
+            } }, 'Delete')));
       });
 
       body.textContent = '';
