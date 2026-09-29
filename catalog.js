@@ -46,7 +46,8 @@
     try{
       const {data,error}=await client.rpc('save_catalog_pin',{p_pin:window.gwPin,p_payload:payload,p_revision:revision});
       if(error)return {ok:false,reason:error.message};
-      revision=data;baseline=JSON.stringify(payload);await localSave();
+      if(!data||!data.ok)return {ok:false,reason:(data&&data.msg)||'Not allowed.'};
+      revision=data.revision;baseline=JSON.stringify(payload);await localSave();
       $('publishLocalCatalog').hidden=true;notice('Saved online. Other browsers receive this menu automatically.');
       return {ok:true,shared:true};
     }finally{saving=false;}
