@@ -102,8 +102,9 @@
   $('gwBackupSave').onclick = async () => {
     const email = $('gwBackupEmail').value.trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) { say('gwBackupMsg', 'Enter a valid email.'); return; }
-    const { error } = await c.rpc('owner_set_backup_email', { p_pin: window.gwPin, p_email: email });
+    const { data, error } = await c.rpc('owner_set_backup_email', { p_pin: window.gwPin, p_email: email });
     if (error) { say('gwBackupMsg', error.message); return; }
+    if (data && data.ok === false) { say('gwBackupMsg', data.msg); return; }
     backup.hidden = true;
   };
   window.addEventListener('gw-auth-changed', checkBackup);
