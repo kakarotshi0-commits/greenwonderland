@@ -19,8 +19,9 @@
   // ----- backup email prompt (inside the crew panel, Owner only) -----
   const backup = box('gwBackupBox',
     '<h3 style="font-size:1.1rem;margin-bottom:8px">Set a backup email</h3>' +
-    '<p class="sub">If you ever forget your code, a reset link is sent to this address only.</p>' +
+    '<p class="sub">If you ever forget your code, a reset link is sent to this address only. Enter your Owner code to confirm it is you.</p>' +
     '<div class="row"><input type="email" id="gwBackupEmail" placeholder="Backup email" style="min-width:220px">' +
+    '<input type="password" id="gwBackupPin" placeholder="Owner code" aria-label="Owner code" autocomplete="current-password" style="width:160px">' +
     '<button type="button" class="btn small solid" id="gwBackupSave">Save backup email</button></div>' +
     '<p class="msg" id="gwBackupMsg" role="status"></p>');
   $('crewPanel').insertBefore(backup, $('crewPanel').firstChild);
@@ -95,17 +96,28 @@
   // Owner first entry: ask for backup email if none is set
   async function checkBackup() {
     backup.hidden = true;
-    if (role(signedIn) !== 'owner' || !window.gwPin) return;
+    if (!isTop(signedIn)) return;   // Owner, Admin or Administrator
     const { data } = await c.rpc('owner_backup_is_set');
     if (data === false) backup.hidden = false;
   }
   $('gwBackupSave').onclick = async () => {
     const email = $('gwBackupEmail').value.trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) { say('gwBackupMsg', 'Enter a valid email.'); return; }
-    const { data, error } = await c.rpc('owner_set_backup_email', { p_pin: window.gwPin, p_email: email });
-    if (error) { say('gwBackupMsg', error.message); return; }
-    if (data && data.ok === false) { say('gwBackupMsg', data.msg); return; }
-    backup.hidden = true;
+    const pin = $('gwBackupPin').value.trim() || window.gwPin || '';
+    if (!pin) { say('gwBackupMsg', 'Enter your Owner code in the box above.'); $('gwBackupPin').focus(); return; }
+    const btn = $('gwBackupSave'); btn.disabled = true; say('gwBackupMsg', 'Saving…');
+    try {
+      const { data, error } = await c.rpc('owner_set_backup_email', { p_pin: pin, p_email: email });
+      if (error) { say('gwBackupMsg', error.message); return; }
+      if (data && data.ok === false) {
+        say('gwBackupMsg', (data.msg || 'Could not save.') + ' Check your Owner code and try again.');
+        $('gwBackupPin').focus(); return;
+      }
+      window.gwPin = pin;               // verified by the server; kept in memory only
+      $('gwBackupPin').value = ''; $('gwBackupEmail').value = '';
+      say('gwBackupMsg', 'Backup email saved.'); backup.hidden = true;
+    } catch (e) { say('gwBackupMsg', 'Could not reach the server. Try again.'); }
+    finally { btn.disabled = false; }
   };
   window.addEventListener('gw-auth-changed', checkBackup);
   checkBackup();
