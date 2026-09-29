@@ -1,75 +1,95 @@
-/* Green Wonderland animations
-   One orchestrated moment (hero load + crest ripple), plus motion that
-   answers something the visitor did. Everything is inside the
-   no-preference query, so "reduce motion" users get a static page. */
-
+/* Green Wonderland animations v2 - all motion sits behind the no-preference query. */
 @media (prefers-reduced-motion: no-preference) {
+  :root { --ease: cubic-bezier(.16,1,.3,1); }
+  @keyframes gw-rise  { from { opacity: 0; transform: translateY(20px); } }
+  @keyframes gw-hero  { from { opacity: 0; transform: translateY(28px); filter: blur(10px); } }
+  @keyframes gw-fade  { from { opacity: 0; } }
+  @keyframes gw-pop   { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+  @keyframes gw-crest { from { opacity: 0; transform: scale(.85) rotate(-7deg); } }
+  @keyframes gw-ring  { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.3); opacity: 0; } }
+  @keyframes gw-float { 50% { transform: translateY(-9px) rotate(1.5deg); } }
+  @keyframes gw-sheen { 0%,55% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+  @keyframes gw-glow  { 50% { box-shadow: inset 0 0 24px #96d62a26; } }
+  @keyframes gw-breathe { 50% { box-shadow: 0 0 0 8px #96d62a12, 0 0 30px #96d62a1a; } }
+  @keyframes gw-ripple { to { transform: scale(1); opacity: 0; } }
+  @keyframes gw-d1 { to { transform: translate3d(14vmax,10vmax,0) scale(1.15); } }
+  @keyframes gw-d2 { to { transform: translate3d(-12vmax,-9vmax,0) scale(1.1); } }
+  @keyframes gw-d3 { to { transform: translate3d(-8vmax,7vmax,0) scale(1.25); } }
 
-  @keyframes gw-rise   { from { opacity: 0; transform: translateY(18px); } }
-  @keyframes gw-rise-s { from { opacity: 0; transform: translateY(8px); } }
-  @keyframes gw-fade   { from { opacity: 0; } }
-  @keyframes gw-pop    { from { opacity: 0; transform: translateY(12px) scale(.97); } }
-  @keyframes gw-crest  { from { opacity: 0; transform: scale(.86) rotate(-6deg); } }
-  @keyframes gw-ring {
-    0%   { transform: scale(1);    opacity: .9; }
-    100% { transform: scale(1.28); opacity: 0; }
+  /* Ambient light, scroll progress, cursor glow (created by animations.js) */
+  .gw-ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+  .gw-orb { position: absolute; display: block; border-radius: 50%; will-change: transform; }
+  .gw-orb.o1 { width: 70vmax; height: 70vmax; top: -28vmax; left: -22vmax; background: radial-gradient(circle,#96d62a1c,transparent 62%); animation: gw-d1 32s ease-in-out infinite alternate; }
+  .gw-orb.o2 { width: 60vmax; height: 60vmax; bottom: -26vmax; right: -20vmax; background: radial-gradient(circle,#5aa02a1a,transparent 62%); animation: gw-d2 38s ease-in-out infinite alternate; }
+  .gw-orb.o3 { width: 40vmax; height: 40vmax; top: 38%; left: 42%; background: radial-gradient(circle,#96d62a10,transparent 62%); animation: gw-d3 44s ease-in-out infinite alternate; }
+  .gw-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 40; pointer-events: none; transform-origin: left; transform: scaleX(var(--p,0)); background: linear-gradient(90deg,var(--lime-dim),var(--lime)); box-shadow: 0 0 12px #96d62a88; }
+  .gw-cursor { position: fixed; left: 0; top: 0; width: 520px; height: 520px; margin: -260px 0 0 -260px; border-radius: 50%; z-index: -1; pointer-events: none; opacity: 0; transition: opacity .6s; background: radial-gradient(circle,#96d62a17,transparent 62%); }
+  .gw-cursor.on { opacity: 1; }
+
+  /* Header */
+  header { transition: background .35s, box-shadow .35s; }
+  .nav { transition: padding .35s var(--ease); }
+  .brand img { transition: width .35s var(--ease), height .35s var(--ease), transform .5s var(--ease); }
+  .brand:hover img { transform: rotate(-10deg) scale(1.08); }
+  header.gw-scrolled { box-shadow: 0 10px 30px rgba(0,0,0,.28); }
+  header.gw-scrolled .nav { padding-top: 7px; padding-bottom: 7px; }
+  header.gw-scrolled .brand img { width: 34px; height: 34px; }
+  .navlinks a { position: relative; transition: color .25s; }
+  .navlinks a::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 1px; background: var(--lime); transform: scaleX(0); transform-origin: left; transition: transform .3s var(--ease); }
+  .navlinks a:hover::after, .navlinks a:focus-visible::after, .navlinks a.gw-active::after { transform: scaleX(1); }
+  .navlinks a.gw-active { color: var(--lime); }
+
+  /* Hero: the load sequence */
+  .hero { overflow: hidden; overflow: clip; }
+  .hero .eyebrow { animation: gw-rise .8s var(--ease) backwards; }
+  .hero h1       { animation: gw-hero 1.1s var(--ease) .1s backwards; }
+  .hero p        { animation: gw-rise .9s var(--ease) .3s backwards; }
+  .hero .btn     { animation: gw-rise .9s var(--ease) .45s backwards; }
+  .crest         { animation: gw-crest 1.1s var(--ease) .1s backwards; }
+  .crest img     { animation: gw-float 7s ease-in-out 1.2s infinite; }
+  .crest:before  { border-color: #96d62a70; animation: gw-ring 5.5s ease-out 1.3s infinite backwards; }
+  .crest:after   { border-color: #96d62a50; animation: gw-ring 5.5s ease-out 4.05s infinite backwards; }
+  @supports (-webkit-background-clip: text) or (background-clip: text) {
+    .hero h1 span { background: linear-gradient(105deg,var(--lime) 0 42%,#f1ffc4 50%,var(--lime) 58% 100%) 100% 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: gw-sheen 6s ease-in-out 1.6s infinite; }
   }
-  @keyframes gw-glow { 50% { box-shadow: inset 0 0 24px #96d62a26; } }
 
-  /* ---- Hero: the one orchestrated moment ---- */
-  .hero { overflow: hidden; overflow: clip; } /* ripple rings must not cause sideways scroll */
-  .hero .eyebrow { animation: gw-rise .7s cubic-bezier(.16,1,.3,1) both; }
-  .hero h1       { animation: gw-rise .8s cubic-bezier(.16,1,.3,1) .08s both; }
-  .hero p        { animation: gw-rise .8s cubic-bezier(.16,1,.3,1) .2s both; }
-  .hero .btn     { animation: gw-rise .8s cubic-bezier(.16,1,.3,1) .32s both; }
-  .crest         { animation: gw-crest 1s cubic-bezier(.16,1,.3,1) .1s both; }
-
-  /* Crest rings ripple outward, staggered, once the crest has landed */
-  .crest:before {
-    border-color: #96d62a70;
-    animation: gw-ring 5.5s ease-out 1.3s infinite backwards;
-  }
-  .crest:after {
-    border-color: #96d62a50;
-    animation: gw-ring 5.5s ease-out 4.05s infinite backwards;
-  }
-
-  /* ---- Menu: cards re-enter when the visitor filters or searches ----
-     (animations.js adds .animate-in after the first chip click or keystroke,
-     so the initial shared-menu sync never flickers) */
-  .animate-in > .card { animation: gw-rise-s .38s cubic-bezier(.16,1,.3,1) backwards; }
-  .animate-in > .card:nth-child(2)  { animation-delay: 35ms; }
-  .animate-in > .card:nth-child(3)  { animation-delay: 70ms; }
-  .animate-in > .card:nth-child(4)  { animation-delay: 105ms; }
-  .animate-in > .card:nth-child(5)  { animation-delay: 140ms; }
-  .animate-in > .card:nth-child(6)  { animation-delay: 175ms; }
-  .animate-in > .card:nth-child(7)  { animation-delay: 210ms; }
-  .animate-in > .card:nth-child(8)  { animation-delay: 245ms; }
-  .animate-in > .card:nth-child(n+9) { animation-delay: 280ms; }
-
-  .chip   { transition: border-color .2s, color .2s, background .2s, transform .15s; }
-  .chip:hover { border-color: var(--lime-dim); color: var(--text); }
+  /* Buttons and inputs */
+  .btn, .chip { position: relative; overflow: hidden; }
   .btn:active, .chip:active { transform: scale(.97); }
-  #search { transition: border-color .2s; }
+  .btn.solid::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg,transparent 35%,#ffffff55 50%,transparent 65%); transform: translateX(-130%); transition: transform .8s var(--ease); }
+  .btn.solid:hover::after { transform: translateX(130%); }
+  .gw-ripple { position: absolute; border-radius: 50%; background: currentColor; opacity: .28; transform: scale(0); pointer-events: none; animation: gw-ripple .65s ease-out forwards; }
+  .chip { transition: border-color .2s, color .2s, background .2s, transform .15s; }
+  input, select, textarea { transition: border-color .2s, box-shadow .25s; }
+  input:focus, select:focus, textarea:focus { box-shadow: 0 0 0 3px #96d62a22; }
 
-  /* ---- Nav: underline grows from the left ---- */
-  .navlinks a { position: relative; }
-  .navlinks a::after {
-    content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 1px;
-    background: var(--lime);
-    transform: scaleX(0); transform-origin: left;
-    transition: transform .25s cubic-bezier(.16,1,.3,1);
-  }
-  .navlinks a:hover::after, .navlinks a:focus-visible::after { transform: scaleX(1); }
+  /* Cards: spotlight, lift and slower image zoom */
+  .card { transition: border-color .25s, box-shadow .35s, background .25s, transform .35s var(--ease); }
+  .card .photo { transition: transform .7s var(--ease); }
+  .card:hover .photo { transform: scale(1.06); }
+  .gallery-photo, .staff { position: relative; }
+  .gallery-photo { transition: transform .4s var(--ease), border-color .3s, box-shadow .3s; }
+  .gallery-photo:hover { transform: translateY(-6px); border-color: #96d62a55; box-shadow: 0 18px 40px rgba(0,0,0,.32); }
+  .gallery-photo-media img { transition: transform .7s var(--ease); animation: gw-fade .7s ease-out backwards; }
+  .gallery-photo-media:hover img { transform: scale(1.07); }
+  .card::before, .gallery-photo::before, .staff::before { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .35s; background: radial-gradient(340px circle at var(--mx,50%) var(--my,50%),#96d62a22,transparent 60%); }
+  .card:hover::before, .gallery-photo:hover::before, .staff:hover::before { opacity: 1; }
+  .gallery-initials { animation: gw-breathe 4s ease-in-out infinite; }
 
-  /* ---- Galleries: photos fade in as they load; lightbox opens smoothly ---- */
-  .gallery-photo-media img { animation: gw-fade .6s ease-out backwards; }
-  .gallery-lightbox[open]            { animation: gw-pop .28s cubic-bezier(.16,1,.3,1); }
-  .gallery-lightbox[open]::backdrop  { animation: gw-fade .28s ease-out; }
-  .gallery-lightbox img              { animation: gw-fade .35s ease-out .05s backwards; }
+  /* Scroll reveal (classes are added and removed by animations.js) */
+  .gw-reveal { opacity: 0; transform: translateY(26px) scale(.985); transition: opacity .9s var(--ease), transform .9s var(--ease), filter .9s var(--ease); transition-delay: var(--d,0ms); }
+  .gw-reveal.gw-blur { filter: blur(8px); }
+  .gw-reveal.in { opacity: 1; transform: none; filter: none; }
+  h2 { position: relative; }
+  h2::after { content: ""; position: absolute; left: 0; bottom: -9px; height: 2px; width: 0; background: linear-gradient(90deg,var(--lime),transparent); transition: width .9s var(--ease) .25s; }
+  .gw-seen h2::after, h2.gw-seen::after { width: 56px; }
 
-  /* ---- Crew and sales: panels and rows appear in response to actions ---- */
-  #crewPanel, #admin, #invoiceBox { animation: gw-rise-s .4s cubic-bezier(.16,1,.3,1); }
-  #cartRows > * { animation: gw-rise-s .25s ease-out backwards; }
-  .staff.you    { animation: gw-glow 3.5s ease-in-out infinite; }
+  /* Responses to actions */
+  .gallery-lightbox[open] { animation: gw-pop .35s var(--ease); }
+  .gallery-lightbox[open]::backdrop { animation: gw-fade .3s ease-out; }
+  .gallery-lightbox img { animation: gw-fade .4s ease-out .05s backwards; }
+  #crewPanel, #admin, #invoiceBox { animation: gw-rise .45s var(--ease); }
+  #cartRows > * { animation: gw-rise .3s ease-out backwards; }
+  .staff.you { animation: gw-glow 3.5s ease-in-out infinite; }
 }
+@media print { .gw-reveal { opacity: 1 !important; transform: none !important; filter: none !important; } }
