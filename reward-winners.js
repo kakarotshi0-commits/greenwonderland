@@ -69,7 +69,7 @@
         h('tbody', null, rows.map(function (r) {
           return h('tr', null, h('td', null, r.name), h('td', null, r.phone), h('td', null, r.prize),
             h('td', null, new Date(r.used_at).toLocaleDateString()),
-            h('td', { class: r.given ? 'gwrw-given' : 'gwrw-wait' }, r.given ? 'Reward given' : 'Waiting'));
+            h('td', { class: r.given ? 'gwrw-given' : 'gwrw-wait' }, r.given ? 'Reward given' + (r.given_by ? ' (' + r.given_by + ')' : '') : 'Waiting'));
         })))));
     }).catch(function (e) { listEl.textContent = 'Could not load the winners: ' + e.message; });
   }
