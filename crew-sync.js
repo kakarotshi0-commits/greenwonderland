@@ -1,8 +1,13 @@
 // Shares the crew roster and roles across browsers (Supabase). Load AFTER catalog.js.
+// Owner/Admin access is proven by their crew code (checked on the server); no email verification.
 (() => {
   const c = window.gwClient; if (!c) return;
-  let rev = 0, owner = false, live = false, base = null, first = true;
-  const snap = () => JSON.stringify({ r: STATE.roster.map(p => [p.id, p.name, p.role, owner ? p.pin : '']), ro: STATE.roles });
+  let rev = 0, live = false, base = null;
+  const TOP = ['owner', 'admin', 'administrator'];
+  const isTop = p => !!p && TOP.includes(String(p.role).trim().toLowerCase());
+  const owner = () => isTop(signedIn) && !!window.gwPin;
+  const snap = () => JSON.stringify({ r: STATE.roster.map(p => [p.id, p.name, p.role, owner() ? p.pin : '']), ro: STATE.roles });
+  const authChanged = () => { window.dispatchEvent(new Event('gw-auth-changed')); pull(true); };
 
   function apply(d) {
     STATE.roles = d.roles || STATE.roles;
@@ -10,13 +15,13 @@
     ensureRoles();
     if (signedIn) {
       signedIn = STATE.roster.find(p => p.id === signedIn.id) || null;
-      if (!signedIn) { try { sessionStorage.removeItem('gw_local_signed_in'); } catch (e) {} }
+      if (!signedIn) { window.gwPin = null; try { sessionStorage.removeItem('gw_local_signed_in'); } catch (e) {} }
     }
     base = snap();
     try { renderStaffGrid(); renderCrewPanel(); initPerms(); renderRolesAdmin(); renderRosterAdmin(); refreshNewRoleOptions(); } catch (e) { console.warn(e); }
   }
   async function pull(force) {
-    const r = await (owner ? c.rpc('crew_admin_get') : c.rpc('crew_public'));
+    const r = await (owner() ? c.rpc('crew_admin_get_pin', { p_pin: window.gwPin }) : c.rpc('crew_public'));
     const d = r.data; if (r.error || !d) return;
     if (!(d.revision > 0)) { live = false; return; }
     live = true;
@@ -24,35 +29,32 @@
     if (!force && base !== null && snap() !== base) return; // unsaved local edits: don't overwrite
     rev = d.revision; apply(d);
   }
-  async function checkOwner() {
-    const { data: { session } } = await c.auth.getSession();
-    let o = false;
-    if (session) { const r = await c.rpc('is_catalog_owner'); o = r.data === true; }
-    const changed = o !== owner; owner = o;
-    await pull(first || changed); first = false;
-  }
 
   const prev = publishState;
   publishState = async function (opts = {}) {
     const r = await prev(opts);
     if (!opts.crew) return r;
-    if (!owner) return { ok: false, reason: 'Verify your Owner email in Shared menu access first. Nothing was published.' };
+    if (!owner()) return { ok: false, reason: 'Sign in as Owner or Admin with your code first. Nothing was published.' };
     const payload = { roster: STATE.roster.map(p => ({ id: p.id, name: p.name, role: p.role, pin: p.pin })), roles: STATE.roles };
-    const { data, error } = await c.rpc('crew_admin_save', { p_payload: payload, p_revision: rev });
+    const { data, error } = await c.rpc('crew_admin_save_pin', { p_pin: window.gwPin, p_payload: payload, p_revision: rev });
     if (error) return { ok: false, reason: error.message };
     rev = data; live = true; base = snap();
     return { ok: true, shared: true };
   };
   gwFindPerson = async pin => {
+    let person = null;
     if (live) {
       const { data, error } = await c.rpc('crew_login', { p_pin: pin });
-      if (error || !data || !data.ok) return null;
-      return STATE.roster.find(p => p.id === data.person.id) || null;
+      if (!error && data && data.ok) person = STATE.roster.find(p => p.id === data.person.id) || null;
+    } else {
+      person = STATE.roster.find(p => p.pin === pin) || null; // before the first shared save
     }
-    return STATE.roster.find(p => p.pin === pin) || null; // before the first shared save
+    window.gwPin = person && isTop(person) ? pin : null;   // kept in memory only
+    setTimeout(authChanged, 0);
+    return person;
   };
-  c.auth.onAuthStateChange(() => setTimeout(checkOwner, 0));
-  checkOwner();
+  document.getElementById('signoutBtn').addEventListener('click', () => { window.gwPin = null; setTimeout(authChanged, 0); });
+  pull(true);
   setInterval(() => { if (!document.hidden) pull(false); }, 15000);
   addEventListener('focus', () => pull(false));
 })();
