@@ -216,7 +216,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
       <p id="contentMsg" class="msg" role="status"></p>
     </form>
   </div>
-  <div class="card2" id="catalogAccess"><h3>Shared menu access</h3><p id="catalogStatus" role="status">Loading shared menu…</p><p id="catalogAuthStatus" role="status"></p><form id="catalogAuthForm" class="row"><input id="catalogEmail" type="email" required placeholder="Owner email" aria-label="Owner email"><button class="btn" id="catalogSendLink">Send verification link</button></form><button class="btn" id="catalogSignOut" hidden>Sign out of shared editing</button><button class="btn" id="publishLocalCatalog" hidden>Publish this browser’s menu</button><button class="btn" id="reloadCatalog">Reload shared menu</button></div><div id="categoryBlock" hidden>
+  <div class="card2" id="catalogAccess"><h3>Shared menu access</h3><p id="catalogStatus" role="status">Loading shared menu…</p><p id="catalogAuthStatus" role="status"></p><button class="btn" id="publishLocalCatalog" hidden>Publish this browser’s menu</button><button class="btn" id="reloadCatalog">Reload shared menu</button></div><div id="categoryBlock" hidden>
   <h3>Menu categories · Owner only</h3>
   <p>Organize your menu. Before removing a category, choose where its items should go.</p>
   <div class="row"><input id="newCategory" maxlength="40" placeholder="New category name" aria-label="New category name"><button type="button" class="btn" id="addCategory">Add category</button></div>
@@ -651,8 +651,9 @@ setInterval(updateAttendanceTimes,1000);
 </script>
 <script src="categories.js?v=3" defer></script>
 <script src="supabase.js?v=3" defer></script>
-<script src="catalog.js?v=4" defer></script>
-<script src="crew-sync.js?v=1" defer></script>
+<script src="catalog.js?v=5" defer></script>
+<script src="crew-sync.js?v=2" defer></script>
+<script src="owner-recovery.js?v=1" defer></script>
 <script src="gallery.js?v=owner-permission-1" defer></script>
 <script src="animations.js" defer></script>
 <script src="reward-wheel.js?v=8"></script>
