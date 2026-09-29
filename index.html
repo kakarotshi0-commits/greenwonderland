@@ -693,6 +693,14 @@ setInterval(updateAttendanceTimes,1000);
     })
     .catch(function (e) { msg.textContent = 'Reward code error: ' + e.message; });
   });
+</script><script src="reward-winners.js"></script>
+<script>
+  RewardWinners.init({
+    supabaseUrl: 'https://wtiefpuczygmyjaampdg.supabase.co',
+    supabaseKey: 'sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif',
+    canStaff: function () { return !!signedIn; },
+    staffName: function () { return signedIn ? signedIn.name : ''; }
+  });
 </script>
 </body>
 </html>
