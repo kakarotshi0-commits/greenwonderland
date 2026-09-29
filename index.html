@@ -657,14 +657,27 @@ setInterval(updateAttendanceTimes,1000);
     }
   });
 
-  // Creates a wheel code after a sale is completed (no changes needed in the sale code above).
+  // After a sale: create a wheel code and, if the sale qualifies, add it to the invoice.
   var gwSeenSales = STATE.sales.length;
   document.getElementById('completeSale').addEventListener('click', function () {
-    if (STATE.sales.length > gwSeenSales) {
-      var sale = STATE.sales[STATE.sales.length - 1];
-      gwSeenSales = STATE.sales.length;
-      RewardWheel.onSale({ id: sale.id, employee: sale.employeeName, total: sale.total });
-    }
+    if (STATE.sales.length <= gwSeenSales) return;
+    var sale = STATE.sales[STATE.sales.length - 1];
+    gwSeenSales = STATE.sales.length;
+    RewardWheel.onSale({ id: sale.id, employee: sale.employeeName, total: sale.total }).then(function (code) {
+      if (!code) return;
+      var box = document.getElementById('invoiceText');
+      box.textContent += '\n\n**Reward Wheel Code: ' + code + '**\nGood for one spin. Works once.';
+      var btn = document.getElementById('copyInvoice');
+      btn.onclick = async function () {
+        try {
+          await navigator.clipboard.writeText(box.textContent);
+          btn.textContent = 'Copied!';
+          setTimeout(function () { btn.textContent = 'Copy invoice'; }, 1500);
+        } catch (e) {
+          document.getElementById('saleMsg').textContent = 'Copy unavailable. Select the invoice text and copy manually.';
+        }
+      };
+    });
   });
 </script>
 </body>
