@@ -214,22 +214,16 @@
       h('div', { class: 'gwrw-row' }, input, go), msg, claimBox));
   }
 
-  /* ---------- admin panel (passphrase checked by the server) ---------- */
+  /* ---------- admin panel (no passphrase) ---------- */
   function openAdmin() {
     if (!can()) return;
     var body = h('div', { class: 'gwrw-body' }), draft = null, codes = [];
     openModal('Reward wheel settings', body, true);
-    if (adminPin) load(); else askPin('');
+    adminPin = ''; load();
 
-    function askPin(text) {
-      var pin = h('input', { class: 'gwrw-input', type: 'password', placeholder: 'Admin passphrase', 'aria-label': 'Admin passphrase', autocomplete: 'off' });
-      function submit() { adminPin = pin.value; load(); }
-      pin.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    function showError(text) {
       body.textContent = '';
-      body.appendChild(h('div', null, h('p', null, 'Enter the admin passphrase to manage the wheel.'),
-        h('div', { class: 'gwrw-row' }, pin, h('button', { class: 'gwrw-primary', onclick: submit }, 'Unlock')),
-        h('p', { class: 'gwrw-msg gwrw-err' }, text)));
-      pin.focus();
+      body.appendChild(h('p', { class: 'gwrw-msg gwrw-err' }, text));
     }
     function load() {
       body.textContent = 'Loading\u2026';
@@ -237,9 +231,9 @@
         draft = { threshold: Number(r[0].threshold), prizes: JSON.parse(JSON.stringify(r[0].prizes)) };
         draft.prizes.forEach(function (p) { p.weight = Number(p.weight); });
         codes = r[1]; render();
-      }).catch(function (e) { adminPin = null; askPin(e.message); });
+      }).catch(function (e) { showError(e.message); });
     }
-    function reloadCodes() { rpc('rw_admin_codes', { p_pin: adminPin }).then(function (c) { codes = c; render(); }).catch(function (e) { adminPin = null; askPin(e.message); }); }
+    function reloadCodes() { rpc('rw_admin_codes', { p_pin: adminPin }).then(function (c) { codes = c; render(); }).catch(function (e) { showError(e.message); }); }
 
     function render() {
       var total = draft.prizes.reduce(function (s, p) { return s + (p.weight > 0 ? p.weight : 0); }, 0);
@@ -281,14 +275,6 @@
           .catch(function (e) { saveBtn.disabled = false; say('gwrw-err', e.message); });
       } }, 'Save settings');
 
-      var newPin = h('input', { class: 'gwrw-input', type: 'password', placeholder: 'New passphrase (12+ characters)', 'aria-label': 'New admin passphrase', autocomplete: 'off' });
-      var pinMsg = h('p', { class: 'gwrw-msg', 'aria-live': 'polite' });
-      var pinBtn = h('button', { class: 'gwrw-btn', onclick: function () {
-        rpc('rw_admin_change_pin', { p_pin: adminPin, p_new: newPin.value }).then(function () {
-          adminPin = newPin.value; newPin.value = ''; pinMsg.className = 'gwrw-msg gwrw-win'; pinMsg.textContent = 'Passphrase changed.';
-        }).catch(function (e) { pinMsg.className = 'gwrw-msg gwrw-err'; pinMsg.textContent = e.message; });
-      } }, 'Change passphrase');
-
       var list = codes.map(function (c) {
         var status = c.voided ? 'Cancelled' : c.used_at ? 'Used: ' + c.prize_label : 'Unused';
         return h('tr', null,
@@ -310,9 +296,7 @@
         h('h3', null, 'Latest codes'),
         codes.length ? h('div', { class: 'gwrw-scroll' }, h('table', { class: 'gwrw-table' },
           h('thead', null, h('tr', null, h('th', null, 'Code'), h('th', null, 'Employee'), h('th', null, 'Sale'), h('th', null, 'Created'), h('th', null, 'Status'), h('th', null, 'Player details'), h('th'))),
-          h('tbody', null, list))) : h('p', { class: 'gwrw-hint' }, 'No codes yet. One is created when a sale reaches the amount above.'),
-        h('h3', null, 'Admin passphrase'),
-        h('div', { class: 'gwrw-row' }, newPin, pinBtn), pinMsg));
+          h('tbody', null, list))) : h('p', { class: 'gwrw-hint' }, 'No codes yet. One is created when a sale reaches the amount above.')));
     }
   }
 
