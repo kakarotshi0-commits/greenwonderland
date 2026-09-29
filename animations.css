@@ -1,0 +1,75 @@
+/* Green Wonderland animations
+   One orchestrated moment (hero load + crest ripple), plus motion that
+   answers something the visitor did. Everything is inside the
+   no-preference query, so "reduce motion" users get a static page. */
+
+@media (prefers-reduced-motion: no-preference) {
+
+  @keyframes gw-rise   { from { opacity: 0; transform: translateY(18px); } }
+  @keyframes gw-rise-s { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes gw-fade   { from { opacity: 0; } }
+  @keyframes gw-pop    { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+  @keyframes gw-crest  { from { opacity: 0; transform: scale(.86) rotate(-6deg); } }
+  @keyframes gw-ring {
+    0%   { transform: scale(1);    opacity: .9; }
+    100% { transform: scale(1.28); opacity: 0; }
+  }
+  @keyframes gw-glow { 50% { box-shadow: inset 0 0 24px #96d62a26; } }
+
+  /* ---- Hero: the one orchestrated moment ---- */
+  .hero { overflow: hidden; overflow: clip; } /* ripple rings must not cause sideways scroll */
+  .hero .eyebrow { animation: gw-rise .7s cubic-bezier(.16,1,.3,1) both; }
+  .hero h1       { animation: gw-rise .8s cubic-bezier(.16,1,.3,1) .08s both; }
+  .hero p        { animation: gw-rise .8s cubic-bezier(.16,1,.3,1) .2s both; }
+  .hero .btn     { animation: gw-rise .8s cubic-bezier(.16,1,.3,1) .32s both; }
+  .crest         { animation: gw-crest 1s cubic-bezier(.16,1,.3,1) .1s both; }
+
+  /* Crest rings ripple outward, staggered, once the crest has landed */
+  .crest:before {
+    border-color: #96d62a70;
+    animation: gw-ring 5.5s ease-out 1.3s infinite backwards;
+  }
+  .crest:after {
+    border-color: #96d62a50;
+    animation: gw-ring 5.5s ease-out 4.05s infinite backwards;
+  }
+
+  /* ---- Menu: cards re-enter when the visitor filters or searches ----
+     (animations.js adds .animate-in after the first chip click or keystroke,
+     so the initial shared-menu sync never flickers) */
+  .animate-in > .card { animation: gw-rise-s .38s cubic-bezier(.16,1,.3,1) backwards; }
+  .animate-in > .card:nth-child(2)  { animation-delay: 35ms; }
+  .animate-in > .card:nth-child(3)  { animation-delay: 70ms; }
+  .animate-in > .card:nth-child(4)  { animation-delay: 105ms; }
+  .animate-in > .card:nth-child(5)  { animation-delay: 140ms; }
+  .animate-in > .card:nth-child(6)  { animation-delay: 175ms; }
+  .animate-in > .card:nth-child(7)  { animation-delay: 210ms; }
+  .animate-in > .card:nth-child(8)  { animation-delay: 245ms; }
+  .animate-in > .card:nth-child(n+9) { animation-delay: 280ms; }
+
+  .chip   { transition: border-color .2s, color .2s, background .2s, transform .15s; }
+  .chip:hover { border-color: var(--lime-dim); color: var(--text); }
+  .btn:active, .chip:active { transform: scale(.97); }
+  #search { transition: border-color .2s; }
+
+  /* ---- Nav: underline grows from the left ---- */
+  .navlinks a { position: relative; }
+  .navlinks a::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 1px;
+    background: var(--lime);
+    transform: scaleX(0); transform-origin: left;
+    transition: transform .25s cubic-bezier(.16,1,.3,1);
+  }
+  .navlinks a:hover::after, .navlinks a:focus-visible::after { transform: scaleX(1); }
+
+  /* ---- Galleries: photos fade in as they load; lightbox opens smoothly ---- */
+  .gallery-photo-media img { animation: gw-fade .6s ease-out backwards; }
+  .gallery-lightbox[open]            { animation: gw-pop .28s cubic-bezier(.16,1,.3,1); }
+  .gallery-lightbox[open]::backdrop  { animation: gw-fade .28s ease-out; }
+  .gallery-lightbox img              { animation: gw-fade .35s ease-out .05s backwards; }
+
+  /* ---- Crew and sales: panels and rows appear in response to actions ---- */
+  #crewPanel, #admin, #invoiceBox { animation: gw-rise-s .4s cubic-bezier(.16,1,.3,1); }
+  #cartRows > * { animation: gw-rise-s .25s ease-out backwards; }
+  .staff.you    { animation: gw-glow 3.5s ease-in-out infinite; }
+}
