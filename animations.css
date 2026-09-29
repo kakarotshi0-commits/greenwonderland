@@ -93,3 +93,14 @@
   .staff.you { animation: gw-glow 3.5s ease-in-out infinite; }
 }
 @media print { .gw-reveal { opacity: 1 !important; transform: none !important; filter: none !important; } }
+
+/* Background v3: colourful aurora, dotted grid, floating bubbles/leaves/sparkles */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes gw-dots { to { background-position: 28px 56px; } }
+  .gw-orb.o1 { background: radial-gradient(circle,#96d62a30,transparent 62%); }
+  .gw-orb.o2 { background: radial-gradient(circle,#8a5cf62e,transparent 62%); }
+  .gw-orb.o3 { width: 46vmax; height: 46vmax; background: radial-gradient(circle,#1fd6a02c,transparent 62%); }
+  .gw-ambient::before { content: ""; position: absolute; width: 48vmax; height: 48vmax; top: -14vmax; right: -16vmax; border-radius: 50%; background: radial-gradient(circle,#f5c54226,transparent 62%); animation: gw-d2 36s ease-in-out infinite alternate; }
+  .gw-ambient::after { content: ""; position: absolute; inset: 0; background-image: radial-gradient(#96d62a38 1px,transparent 1.6px); background-size: 28px 28px; -webkit-mask-image: radial-gradient(ellipse at 50% 30%,#000 0,transparent 75%); mask-image: radial-gradient(ellipse at 50% 30%,#000 0,transparent 75%); animation: gw-dots 40s linear infinite; }
+  .gw-fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+}
