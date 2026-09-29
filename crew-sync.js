@@ -23,6 +23,7 @@
   async function pull(force) {
     const r = await (owner() ? c.rpc('crew_admin_get_pin', { p_pin: window.gwPin }) : c.rpc('crew_public'));
     const d = r.data; if (r.error || !d) return;
+    if (d.ok === false) return;
     if (!(d.revision > 0)) { live = false; return; }
     live = true;
     if (!force && d.revision === rev) return;
@@ -38,7 +39,8 @@
     const payload = { roster: STATE.roster.map(p => ({ id: p.id, name: p.name, role: p.role, pin: p.pin })), roles: STATE.roles };
     const { data, error } = await c.rpc('crew_admin_save_pin', { p_pin: window.gwPin, p_payload: payload, p_revision: rev });
     if (error) return { ok: false, reason: error.message };
-    rev = data; live = true; base = snap();
+    if (!data || !data.ok) return { ok: false, reason: (data && data.msg) || 'Not allowed.' };
+    rev = data.revision; live = true; base = snap();
     return { ok: true, shared: true };
   };
   gwFindPerson = async pin => {
