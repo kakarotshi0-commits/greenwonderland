@@ -282,11 +282,7 @@
       }
       var list = codes.map(function (c) {
         var status = c.voided ? 'Cancelled' : c.used_at ? 'Used: ' + c.prize_label : 'Unused';
-        return h('tr', null,
-          h('td', { class: 'gwrw-mono' }, c.code), h('td', null, c.employee || '-'), h('td', null, money(c.amount)),
-          h('td', null, new Date(c.created_at).toLocaleString()), h('td', null, status),
-          h('td', null, c.claim_name ? c.claim_name + ' \u00b7 CID ' + c.claim_cid + ' \u00b7 ' + c.claim_phone : (c.used_at ? 'Not sent yet' : '-')),
-          h('td', null,
+        var actions = h('td', null,
             !c.used_at && !c.voided ? h('button', { class: 'gwrw-btn', onclick: function () {
               rpc('rw_admin_void', { p_pin: adminPin, p_code: c.code }).then(reloadCodes).catch(function (e) { sayCode(e.message); });
             } }, 'Cancel code') : '',
@@ -299,7 +295,11 @@
                 reloadCodes();
                 if (window.RewardWinners && RewardWinners.refresh) RewardWinners.refresh();
               }).catch(function (e) { sayCode(e.message); });
-            } }, 'Delete')));
+            } }, 'Delete'));
+        return h('tr', null, actions,
+          h('td', { class: 'gwrw-mono' }, c.code), h('td', null, c.employee || '-'), h('td', null, money(c.amount)),
+          h('td', null, new Date(c.created_at).toLocaleString()), h('td', null, status),
+          h('td', null, c.claim_name ? c.claim_name + ' \u00b7 CID ' + c.claim_cid + ' \u00b7 ' + c.claim_phone : (c.used_at ? 'Not sent yet' : '-')));
       });
 
       body.textContent = '';
@@ -311,7 +311,7 @@
         rows, h('div', { class: 'gwrw-row' }, addBtn, saveBtn), msg,
         h('h3', null, 'Latest codes'), codeMsg,
         codes.length ? h('div', { class: 'gwrw-scroll' }, h('table', { class: 'gwrw-table' },
-          h('thead', null, h('tr', null, h('th', null, 'Code'), h('th', null, 'Employee'), h('th', null, 'Sale'), h('th', null, 'Created'), h('th', null, 'Status'), h('th', null, 'Player details'), h('th'))),
+          h('thead', null, h('tr', null, h('th', null, 'Actions'), h('th', null, 'Code'), h('th', null, 'Employee'), h('th', null, 'Sale'), h('th', null, 'Created'), h('th', null, 'Status'), h('th', null, 'Player details'))),
           h('tbody', null, list))) : h('p', { class: 'gwrw-hint' }, 'No codes yet. One is created when a sale reaches the amount above.')));
     }
   }
