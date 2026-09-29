@@ -127,3 +127,49 @@
     cta.addEventListener('pointerleave', () => { cta.style.translate = ''; });
   }
 })();
+
+// Fun background: floating bubbles, leaves and sparkles on a canvas behind the page.
+(() => {
+  'use strict';
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv = document.createElement('canvas'); cv.className = 'gw-fx'; cv.setAttribute('aria-hidden', 'true');
+  document.body.append(cv);
+  const g = cv.getContext('2d'); if (!g) return;
+  const COL = ['150,214,42', '31,214,160', '138,92,246', '245,197,66', '255,255,255'];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const N = matchMedia('(max-width:700px)').matches ? 22 : 46;
+  let W = 0, H = 0, D = 1, mx = -999, my = -999, sy = scrollY, ps = [];
+  const spawn = init => { const t = Math.random(); return { k: t < .4 ? 0 : t < .7 ? 1 : 2, x: rnd(0, W), y: init ? rnd(0, H) : H + 40,
+    r: rnd(6, 22), s: rnd(.15, .6), a: rnd(0, 6.28), va: rnd(-.012, .012), ph: rnd(0, 6.28), c: COL[(Math.random() * COL.length) | 0], z: rnd(.4, 1) }; };
+  function resize() { D = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * D; cv.height = H * D; g.setTransform(D, 0, 0, D, 0, 0); }
+  resize(); ps = Array.from({ length: N }, () => spawn(true));
+  addEventListener('resize', resize);
+  addEventListener('scroll', () => { sy = scrollY; }, { passive: true });
+  addEventListener('pointermove', e => { mx = e.clientX; my = e.clientY; }, { passive: true });
+  function draw(p, x, y, t) {
+    const al = p.k === 2 ? (.25 + .75 * Math.abs(Math.sin(t * .002 + p.ph))) * .8 * p.z : .34 * p.z;
+    g.strokeStyle = `rgba(${p.c},${al})`; g.fillStyle = `rgba(${p.c},${al * .25})`; g.lineWidth = 1.2;
+    g.shadowColor = `rgba(${p.c},.6)`; g.shadowBlur = 10;
+    if (p.k === 0) { g.beginPath(); g.arc(x, y, p.r, 0, 6.28); g.fill(); g.stroke();
+      g.beginPath(); g.arc(x, y, p.r * .65, 3.6, 4.6); g.stroke(); }
+    else if (p.k === 1) { g.save(); g.translate(x, y); g.rotate(p.a); const r = p.r * 1.3;
+      g.beginPath(); g.moveTo(0, -r); g.quadraticCurveTo(r * .8, -r * .2, 0, r); g.quadraticCurveTo(-r * .8, -r * .2, 0, -r);
+      g.fill(); g.moveTo(0, -r); g.lineTo(0, r); g.stroke(); g.restore(); }
+    else { const r = p.r * .8; g.save(); g.translate(x, y); g.rotate(p.a * .3); g.beginPath();
+      g.moveTo(0, -r); g.quadraticCurveTo(0, 0, r, 0); g.quadraticCurveTo(0, 0, 0, r); g.quadraticCurveTo(0, 0, -r, 0); g.quadraticCurveTo(0, 0, 0, -r);
+      g.fill(); g.stroke(); g.restore(); }
+  }
+  function frame(t) {
+    g.clearRect(0, 0, W, H);
+    for (const p of ps) {
+      p.y -= p.s * p.z; p.a += p.va; p.x += Math.sin(t * .0006 + p.ph) * .35;
+      const yy = ((p.y - sy * .25 * p.z) % (H + 80) + (H + 80)) % (H + 80) - 40;
+      const dx = p.x - mx, dy = yy - my, d = Math.hypot(dx, dy);
+      if (d < 130 && d > 0) { p.x += dx / d * (130 - d) * .04; p.y += dy / d * (130 - d) * .04; }
+      if (p.x < -40) p.x = W + 40; else if (p.x > W + 40) p.x = -40;
+      draw(p, p.x, yy, t);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
