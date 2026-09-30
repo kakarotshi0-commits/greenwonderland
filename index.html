@@ -486,7 +486,7 @@ function renderLogs(){
   const sum=sales.reduce((t,s)=>t+(Number(s.total)||0),0);
   const who=f?(STATE.roster.find(p=>p.id===f)||{name:''}).name:'';
   document.getElementById('salesSummary').textContent = sales.length+' sale'+(sales.length===1?'':'s')+' · $'+sum.toFixed(2)+' total'+(who?' — '+who:'');
-  document.getElementById('salesLog').innerHTML = sales.slice(-15).reverse().map(s=>`<div>${new Date(s.ts).toLocaleString()} — ${escapeHtml(s.employeeName)} (${escapeHtml(s.employeeRole)}) — $${Number(s.total).toFixed(2)}${discTag(s)}</div>`).join('') || '<div>No sales yet.</div>';
+  document.getElementById('salesLog').innerHTML = sales.slice(-15).reverse().map(s=>`<div data-sid="${escapeHtml(s.id)}">${new Date(s.ts).toLocaleString()} — ${escapeHtml(s.employeeName)} (${escapeHtml(s.employeeRole)}) — $${Number(s.total).toFixed(2)}${discTag(s)}</div>`).join('') || '<div>No sales yet.</div>';
   document.getElementById('clockLog').innerHTML = clock.slice(-15).reverse().map(c=>`<div>${new Date(c.ts).toLocaleString()} — ${escapeHtml(c.name)} clocked ${escapeHtml(c.type)}</div>`).join('') || '<div>No entries yet.</div>';
 }
 document.getElementById('empFilter').addEventListener('change',()=>renderLogs());
@@ -694,7 +694,7 @@ setInterval(updateAttendanceTimes,1000);
 <script src="owner-recovery.js?v=1" defer></script>
 <script src="gallery.js?v=owner-permission-1" defer></script>
 <script src="animations.js" defer></script>
-<script src="sales-sync.js?v=1" defer></script>
+<script src="sales-sync.js?v=2" defer></script>
 <script src="reward-wheel.js?v=8"></script>
 <script>
   var GW_URL = 'https://wtiefpuczygmyjaampdg.supabase.co';
