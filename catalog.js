@@ -2,6 +2,13 @@
   const client=supabase.createClient('https://wtiefpuczygmyjaampdg.supabase.co','sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif');
   window.gwClient=client;
   const $=id=>document.getElementById(id);
+  // Owner/Admin code is kept in memory only. If this tab has lost it (page reload, another browser), ask for it when saving.
+  window.gwEnsurePin=()=>{
+    if(window.gwPin)return true;
+    const p=window.prompt('Enter your Owner or Admin code to save for everyone:');
+    if(!p||!p.trim())return false;
+    window.gwPin=p.trim();return true;
+  };
   const snapshot=()=>({menu:STATE.menu,categories:[...CATS],content:STATE.content||{}});
   try { if(!localStorage.getItem("gw-menu-before-sync-v1"))localStorage.setItem("gw-menu-before-sync-v1",JSON.stringify(snapshot())); } catch {}
   let revision=0,ready=false,owner=false,saving=false,baseline=JSON.stringify(snapshot());
@@ -33,11 +40,12 @@
   const isTop=()=>!!signedIn&&TOP.includes(String(signedIn.role).trim().toLowerCase());
   function refreshAccess(){
     owner=isTop()&&!!window.gwPin;
-    $('catalogAuthStatus').textContent=owner?'Signed in as '+signedIn.role+'. Shared saving is enabled.':isTop()?'Sign out and sign in again with your code to save for everyone.':'Sign in as Owner or Admin (Crew section) to save changes for everyone.';
+    $('catalogAuthStatus').textContent=owner?'Signed in as '+signedIn.role+'. Shared saving is enabled.':isTop()?'Signed in. You will be asked for your code when you save for everyone.':'Sign in as Owner or Admin (Crew section) to save changes for everyone.';
   }
   publishState=async function(options={}){
     if(!options.catalog)return localSave();
     if(!ready)return {ok:false,reason:'Shared menu is still loading or unavailable. Retry shortly.'};
+    if(isTop()&&!window.gwPin)window.gwEnsurePin();
     refreshAccess();
     if(!owner)return {ok:false,reason:'Sign in as Owner or Admin with your code first. Nothing was published.'};
     if(saving)return {ok:false,reason:'A save is already running. Please wait.'};
@@ -46,7 +54,7 @@
     try{
       const {data,error}=await client.rpc('save_catalog_pin',{p_pin:window.gwPin,p_payload:payload,p_revision:revision});
       if(error)return {ok:false,reason:error.message};
-      if(!data||!data.ok)return {ok:false,reason:(data&&data.msg)||'Not allowed.'};
+      if(!data||!data.ok){window.gwPin=null;refreshAccess();return {ok:false,reason:(data&&data.msg)||'Not allowed.'};}
       revision=data.revision;baseline=JSON.stringify(payload);await localSave();
       $('publishLocalCatalog').hidden=true;notice('Saved online. Other browsers receive this menu automatically.');
       return {ok:true,shared:true};
