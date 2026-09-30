@@ -189,6 +189,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
         <button class="btn small" id="posAdd">Add</button>
       </div>
       <div id="cartRows" style="margin-top:10px"></div>
+      <div class="row" id="discountRow" style="margin-top:10px">
+        <select id="discType" aria-label="Discount type"><option value="none">No discount</option><option value="pct">Discount %</option><option value="amt">Discount $</option></select>
+        <input type="number" id="discValue" min="0" step="0.01" placeholder="0" style="width:90px" disabled aria-label="Discount value">
+      </div>
       <div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:10px">
         <strong id="cartTotal">Total: $0.00</strong>
         <button class="btn solid" id="completeSale">Complete sale</button>
@@ -262,7 +266,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   </div>
 
   <div id="reportsBlock">
-  <h3 style="font-size:1.1rem;margin:26px 0 10px">Recent sales</h3>
+  <div class="row" style="margin:26px 0 0"><label for="empFilter" style="font-size:.85rem">Filter by employee</label><select id="empFilter"><option value="">All employees</option></select></div>
+  <h3 style="font-size:1.1rem;margin:14px 0 10px">Recent sales</h3>
+  <div class="sub" id="salesSummary" style="margin-bottom:8px"></div>
   <div class="loglist" id="salesLog"></div>
 
   <h3 style="font-size:1.1rem;margin:26px 0 10px">Attendance log</h3>
@@ -363,7 +369,7 @@ function updateAttendanceTimes(){
   }
   const summary=document.getElementById('attendanceSummary');
   if(!signedIn || !getPerms(signedIn.role).reports){summary.replaceChildren();return;}
-  summary.innerHTML=STATE.roster.map(person=>{
+  summary.innerHTML=STATE.roster.filter(person=>!empFilterId()||person.id===empFilterId()).map(person=>{
     const time=attendanceFor(person.id);
     return '<div class="attendance-person"><strong>'+escapeHtml(person.name)+'</strong><span>'+(time.started!==null?'On shift · '+formatDuration(time.current):'Clocked out')+'</span><span>Total: '+formatDuration(time.total)+' · '+time.shifts+' shifts</span></div>';
   }).join('');
@@ -413,12 +419,23 @@ document.getElementById('clockBtn').addEventListener('click', async ()=>{
   document.getElementById('clockStatus').textContent += r.ok ? '' : ' (not synced)';
 });
 
+function discountFor(sub){
+  const t = document.getElementById('discType').value;
+  const v = Math.max(0, +document.getElementById('discValue').value || 0);
+  if(t==='pct'){ const p = Math.min(100, v); return {amount: Math.min(sub, Math.round(sub*p)/100), label: 'Discount ('+p+'%)'}; }
+  if(t==='amt'){ return {amount: Math.min(sub, Math.round(v*100)/100), label: 'Discount'}; }
+  return {amount:0, label:''};
+}
+function resetDiscount(){ document.getElementById('discType').value='none'; const dv=document.getElementById('discValue'); dv.value=''; dv.disabled=true; }
+document.getElementById('discType').addEventListener('change',()=>{ document.getElementById('discValue').disabled = document.getElementById('discType').value==='none'; renderCart(); });
+document.getElementById('discValue').addEventListener('input',()=>renderCart());
 function renderCart(){
   const rows = document.getElementById('cartRows');
   rows.innerHTML = cart.map((c,i)=>`<div class="rrow"><span>${escapeHtml(c.name)} × ${c.qty}</span><span>$${(c.price*c.qty).toFixed(2)}</span><button class="btn small" data-i="${i}">Remove</button></div>`).join('');
   rows.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{cart.splice(+b.dataset.i,1);renderCart();}));
-  const total = cart.reduce((s,c)=>s+c.price*c.qty,0);
-  document.getElementById('cartTotal').textContent = 'Total: $'+total.toFixed(2);
+  const sub = cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const disc = discountFor(sub);
+  document.getElementById('cartTotal').textContent = disc.amount>0 ? 'Total: $'+(sub-disc.amount).toFixed(2)+' (subtotal $'+sub.toFixed(2)+' − discount $'+disc.amount.toFixed(2)+')' : 'Total: $'+sub.toFixed(2);
 }
 document.getElementById('posAdd').addEventListener('click', ()=>{
   const id = +document.getElementById('posItem').value;
@@ -432,14 +449,16 @@ document.getElementById('posAdd').addEventListener('click', ()=>{
 document.getElementById('completeSale').addEventListener('click', async ()=>{
   const msg = document.getElementById('saleMsg');
   if(!cart.length){ msg.textContent='Add at least one item.'; return; }
-  const total = cart.reduce((s,c)=>s+c.price*c.qty,0);
-  const sale = {id:'s'+Date.now(), ts:new Date().toISOString(), employeeId:signedIn.id, employeeName:signedIn.name, employeeRole:signedIn.role, items:cart.map(c=>({name:c.name,qty:c.qty,price:c.price})), total};
+  const sub = cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const disc = discountFor(sub);
+  const total = Math.round((sub-disc.amount)*100)/100;
+  const sale = {id:'s'+Date.now(), ts:new Date().toISOString(), employeeId:signedIn.id, employeeName:signedIn.name, employeeRole:signedIn.role, items:[...cart.map(c=>({name:c.name,qty:c.qty,price:c.price})), ...(disc.amount>0?[{name:disc.label,qty:1,price:-disc.amount,discount:true}]:[])], total};
   STATE.sales.push(sale);
-  const lines = sale.items.map(it=>`- ${escapeHtml(it.name)} x${it.qty} — $${(it.price*it.qty).toFixed(2)}`).join('\n');
+  const lines = sale.items.map(it=>it.discount ? `- ${escapeHtml(it.name)} — -$${Math.abs(it.price*it.qty).toFixed(2)}` : `- ${escapeHtml(it.name)} x${it.qty} — $${(it.price*it.qty).toFixed(2)}`).join('\n');
   const invoiceText = `**Green Wonderland — Sale**\nEmployee: ${sale.employeeName} (${sale.employeeRole})\nDate: ${new Date(sale.ts).toLocaleString()}\n\n${lines}\n\n**Total: $${sale.total.toFixed(2)}**`;
   document.getElementById('invoiceText').textContent = invoiceText;
   document.getElementById('invoiceBox').style.display = 'block';
-  cart = []; renderCart(); renderLogs();
+  cart = []; resetDiscount(); renderCart(); renderLogs();
   const r = await publishState();
   msg.textContent = msgFor(r);
   document.getElementById('copyInvoice').onclick = async ()=>{
@@ -447,11 +466,30 @@ document.getElementById('completeSale').addEventListener('click', async ()=>{
   };
 });
 
-function renderLogs(){
-  updateAttendanceTimes();
-  document.getElementById('salesLog').innerHTML = STATE.sales.slice(-15).reverse().map(s=>`<div>${new Date(s.ts).toLocaleString()} — ${escapeHtml(s.employeeName)} (${escapeHtml(s.employeeRole)}) — $${s.total.toFixed(2)}</div>`).join('') || '<div>No sales yet.</div>';
-  document.getElementById('clockLog').innerHTML = STATE.clock.slice(-15).reverse().map(c=>`<div>${new Date(c.ts).toLocaleString()} — ${escapeHtml(c.name)} clocked ${escapeHtml(c.type)}</div>`).join('') || '<div>No entries yet.</div>';
+function discTag(s){ const d=(s.items||[]).find(it=>it&&it.discount); return d ? ' · discount $'+Math.abs(d.price*d.qty).toFixed(2) : ''; }
+function empFilterId(){ const sel=document.getElementById('empFilter'); return sel ? sel.value : ''; }
+function refreshEmpFilter(){
+  const sel=document.getElementById('empFilter'); if(!sel) return;
+  const key=STATE.roster.map(p=>p.id+'|'+p.name).join(';');
+  if(sel.dataset.key!==key){
+    const cur=sel.value;
+    sel.innerHTML='<option value="">All employees</option>'+STATE.roster.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+    sel.dataset.key=key;
+    sel.value = STATE.roster.some(p=>p.id===cur) ? cur : '';
+  }
 }
+function renderLogs(){
+  refreshEmpFilter();
+  updateAttendanceTimes();
+  const f=empFilterId();
+  const sales=STATE.sales.filter(s=>!f||s.employeeId===f), clock=STATE.clock.filter(c=>!f||c.id===f);
+  const sum=sales.reduce((t,s)=>t+(Number(s.total)||0),0);
+  const who=f?(STATE.roster.find(p=>p.id===f)||{name:''}).name:'';
+  document.getElementById('salesSummary').textContent = sales.length+' sale'+(sales.length===1?'':'s')+' · $'+sum.toFixed(2)+' total'+(who?' — '+who:'');
+  document.getElementById('salesLog').innerHTML = sales.slice(-15).reverse().map(s=>`<div>${new Date(s.ts).toLocaleString()} — ${escapeHtml(s.employeeName)} (${escapeHtml(s.employeeRole)}) — $${Number(s.total).toFixed(2)}${discTag(s)}</div>`).join('') || '<div>No sales yet.</div>';
+  document.getElementById('clockLog').innerHTML = clock.slice(-15).reverse().map(c=>`<div>${new Date(c.ts).toLocaleString()} — ${escapeHtml(c.name)} clocked ${escapeHtml(c.type)}</div>`).join('') || '<div>No entries yet.</div>';
+}
+document.getElementById('empFilter').addEventListener('change',()=>renderLogs());
 
 function readImageCompressed(file, maxSize){
   return new Promise((resolve,reject)=>{
@@ -651,8 +689,8 @@ setInterval(updateAttendanceTimes,1000);
 </script>
 <script src="categories.js?v=3" defer></script>
 <script src="supabase.js?v=3" defer></script>
-<script src="catalog.js?v=5" defer></script>
-<script src="crew-sync.js?v=2" defer></script>
+<script src="catalog.js?v=6" defer></script>
+<script src="crew-sync.js?v=3" defer></script>
 <script src="owner-recovery.js?v=1" defer></script>
 <script src="gallery.js?v=owner-permission-1" defer></script>
 <script src="animations.js" defer></script>
