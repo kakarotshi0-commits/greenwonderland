@@ -8,6 +8,7 @@
   const LOCAL_KEY = typeof STORAGE_KEY === 'string' ? STORAGE_KEY : 'green-wonderland-local-v1';
   const POLL_MS = 20000, PAGE = 1000, MAX_PAGES = 20;
   const syncedSales = new Set(), syncedClock = new Set();
+  const removedSales = new Set();   // sales the Owner removed; never show or re-upload them
   let queue = Promise.resolve(), refreshing = false, lastOk = null;
 
   const evidOf = c => c.evid || (c.evid = 'c-' + c.id + '-' + c.type + '-' + c.ts);
@@ -95,7 +96,7 @@
       const local = STATE.clock.filter(c => validClock(c) && !syncedClock.has(evidOf(c)));
       STATE.clock = [...clockRows.map(clockFrom), ...local].sort(byTs);
       if (perms.reports) {
-        const saleRows = await fetchAll('gw_sales', 'ts.asc');
+        const saleRows = (await fetchAll('gw_sales', 'ts.asc')).filter(r => !removedSales.has(String(r.id)));
         saleRows.forEach(r => syncedSales.add(r.id));
         const localSales = STATE.sales.filter(s => validSale(s) && !syncedSales.has(String(s.id)));
         STATE.sales = [...saleRows.map(saleFrom), ...localSales].sort(byTs);
@@ -128,6 +129,34 @@
       scrubLocal();
     } catch (e) { console.warn('Old local records not uploaded yet; will retry next visit.', e.message); }
   }
+
+  // ---- Owner: remove a recorded sale for everyone ----
+  const isOwnerRole = () => !!signedIn && String(signedIn.role || '').trim().toLowerCase() === 'owner';
+  async function removeSale(id) {
+    if (!confirm('Remove this sale for everyone? This cannot be undone.')) return;
+    if (!window.gwPin && window.gwEnsurePin) window.gwEnsurePin();   // asks for the Owner code if this tab lost it
+    if (!window.gwPin) { alert('Owner code needed to remove a sale.'); return; }
+    try {
+      const res = await api('rpc/gw_owner_delete', { method: 'POST', body: JSON.stringify({ p_pin: window.gwPin, p_kind: 'sale', p_key: String(id) }) });
+      if (!res || res.ok === false) throw new Error((res && res.msg) || 'Not allowed.');
+    } catch (e) { window.gwPin = null; alert('Could not remove: ' + e.message); return; }
+    removedSales.add(String(id)); syncedSales.add(String(id));
+    const i = STATE.sales.findIndex(x => String(x.id) === String(id)); if (i >= 0) STATE.sales.splice(i, 1);
+    if (typeof gwSeenSales !== 'undefined') gwSeenSales = STATE.sales.length; // keeps reward-code logic in step
+    renderLogs();
+  }
+  function addRemoveButtons() {
+    if (!isOwnerRole()) return;
+    const box = document.getElementById('salesLog'); if (!box) return;
+    box.querySelectorAll('[data-sid]').forEach(row => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn small'; b.textContent = 'Remove'; b.style.marginLeft = '10px';
+      b.addEventListener('click', () => removeSale(row.dataset.sid));
+      row.appendChild(b);
+    });
+  }
+  const baseRenderLogs = renderLogs;
+  renderLogs = function () { baseRenderLogs.apply(this, arguments); addRemoveButtons(); };
 
   // Sales / clock saves (publishState called with no options) go to the shared database.
   const originalPublish = publishState, originalMsg = msgFor;
