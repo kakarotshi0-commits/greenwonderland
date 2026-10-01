@@ -9,15 +9,14 @@
  *
  * Install: add  <script src="gw-cutout.js?v=1"></script>  at the bottom of index.html,
  * after the existing inline scripts (next to gw-dark-photos.js).
- * Tuning: BOUND = how different from the background colour a pixel may be and still be removed.
+ * Works on white / coloured backgrounds AND on black backgrounds with smoke, glow or splash artwork.
+ * Photos it cannot cut out cleanly are left exactly as they were (the button lists them by name).
  */
 (function () {
-  // pure pixel core, shared logic (copied into gw-cutout.js)
   function gwCutoutPixels(d, w, h, opts) {
     opts = opts || {};
     var N = w * h;
     var STEP = opts.step || 14, BOUND = opts.bound || 70;
-    // 1. background colour = median colour of the outer 2px ring
     var R = [], G = [], B = [], A = 0, ring = 0;
     for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
       if (x > 1 && x < w - 2 && y > 1 && y < h - 2) continue;
@@ -27,6 +26,39 @@
     if (A / ring < 200) return { ok: false, transparent: true, why: 'already transparent' };
     function med(a) { a.sort(function (p, q) { return p - q; }); return a[a.length >> 1]; }
     var bg = [med(R), med(G), med(B)];
+
+    // ---- black background (artwork on black, with smoke / glow / splashes) ----
+    if (Math.max(bg[0], bg[1], bg[2]) < 45) {
+      var DK = 34, LO = 5, dark = 0;
+      function mx(p) { var o = p * 4; return Math.max(d[o], d[o + 1], d[o + 2]); }
+      for (var e0 = 0; e0 < R.length; e0++) if (Math.max(R[e0], G[e0], B[e0]) <= DK) dark++;
+      if (dark / R.length < 0.5) return { ok: false, why: 'edge is not black' };
+      var out = new Uint8Array(N), qd = new Int32Array(N), a0 = 0, a1 = 0;
+      for (var s = 0; s < N; s++) {
+        var sx = s % w, sy = (s / w) | 0;
+        if ((sx === 0 || sx === w - 1 || sy === 0 || sy === h - 1) && mx(s) <= DK) { out[s] = 1; qd[a1++] = s; }
+      }
+      while (a0 < a1) {
+        var p2 = qd[a0++], x2 = p2 % w, y2 = (p2 / w) | 0, nb2 = [];
+        if (x2 > 0) nb2.push(p2 - 1); if (x2 < w - 1) nb2.push(p2 + 1); if (y2 > 0) nb2.push(p2 - w); if (y2 < h - 1) nb2.push(p2 + w);
+        for (var t = 0; t < nb2.length; t++) { var q2 = nb2[t]; if (!out[q2] && mx(q2) <= DK) { out[q2] = 1; qd[a1++] = q2; } }
+      }
+      var cov = a1 / N;
+      if (cov < 0.08) return { ok: false, why: 'background not found' };
+      if (cov > 0.97) return { ok: false, why: 'nothing left of the product' };
+      // inside the black region: opacity follows brightness (smoke and glow fade out smoothly, pure black goes clear);
+      // everything not connected to the edge (e.g. the black screen of a device) stays fully solid
+      for (var u = 0; u < N; u++) {
+        if (!out[u]) continue;
+        var m = mx(u), al = Math.min(1, Math.max(0, (m - LO) / (DK - LO)));
+        var o2 = u * 4;
+        if (al > 0.04) { d[o2] = Math.min(255, d[o2] / al); d[o2 + 1] = Math.min(255, d[o2 + 1] / al); d[o2 + 2] = Math.min(255, d[o2 + 2] / al); }
+        d[o2 + 3] = Math.round(255 * al * al);
+      }
+      return { ok: true, cover: cov, mode: 'dark' };
+    }
+
+    // ---- plain solid-colour background (white, grey, coloured) ----
     // edge must be fairly uniform to count as a solid background
     var off = 0;
     for (var k = 0; k < R.length; k++) {
