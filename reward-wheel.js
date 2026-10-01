@@ -1,5 +1,5 @@
 /* Green Wonderland - Reward Wheel (shared version, backed by Supabase)
- * No dependencies. Run reward-wheel-setup.sql in Supabase once first.
+ * No dependencies. Run reward-wheel-setup.sql in Supabase once first, then wheels-setup.sql for the extra wheels.
  *
  *   <script src="reward-wheel.js"></script>
  *   RewardWheel.init({
@@ -15,8 +15,23 @@
 
   var PALETTE = ['#2f9e5a', '#e8a317', '#3b82c4', '#c8453b', '#8a5cc2', '#1f8a8a', '#d9683f', '#6b7d2f'];
   var TAU = Math.PI * 2;
+  /* Each wheel has a style. The server stores only the style name; the look lives here. */
+  var THEMES = {
+    classic: { name: 'Classic green', rim: ['#fff3b0', '#e8a317', '#8a5a00'], glow: 'rgba(150,214,42,.55)', disc: '#0b1a10', bulbs: 24, bulbShape: 'round',
+      on: '#fffbe0', off: '#a8791a', bglow: '#ffe066', hub: ['#f1ffc4', '#3f8f2a'], hubText: '#0b1a10', hubMark: 'GW', stroke: '#fff', sw: 3, ring: null, neon: false,
+      label: '#fff', shade: 'rgba(0,0,0,.4)', font: 'Inter, system-ui, sans-serif', palette: PALETTE,
+      confetti: ['#96d62a', '#ffd23f', '#ff6b9d', '#4cc9f0', '#b388ff', '#ffffff'] },
+    gold: { name: 'Gold VIP', rim: ['#fff6d6', '#d4a21c', '#6b4a00'], glow: 'rgba(255,200,60,.6)', disc: '#1c1304', bulbs: 32, bulbShape: 'round',
+      on: '#fff6c9', off: '#7a5a12', bglow: '#ffd34d', hub: ['#fff2b8', '#b8860b'], hubText: '#2a1c00', hubMark: 'VIP', stroke: '#fff3c4', sw: 3, ring: '#ffe08a', neon: false,
+      label: '#fffbe8', shade: 'rgba(40,24,0,.6)', font: 'Georgia, "Times New Roman", serif', palette: ['#b8860b', '#8c1d2f', '#1f3d2b', '#d4a21c', '#5b2a86', '#a35a14'],
+      confetti: ['#ffd34d', '#fff3c4', '#d4a21c', '#ffffff', '#f5a623'] },
+    neon: { name: 'Neon arcade', rim: ['#7df9ff', '#7a3cff', '#1a0b4d'], glow: 'rgba(122,60,255,.75)', disc: '#070418', bulbs: 16, bulbShape: 'square',
+      on: '#e6fbff', off: '#2a2f66', bglow: '#3cf0ff', hub: ['#b6fbff', '#4b2bd6'], hubText: '#070418', hubMark: 'GO', stroke: '#7df9ff', sw: 2, ring: null, neon: true,
+      label: '#ffffff', shade: 'rgba(5,3,24,.7)', font: '"Courier New", ui-monospace, monospace', palette: ['#ff2d95', '#3cf0ff', '#7a3cff', '#b6f03d', '#ffb02e', '#2d6bff'],
+      confetti: ['#3cf0ff', '#ff2d95', '#7a3cff', '#b6f03d', '#ffffff'] }
+  };
   var cfg = { supabaseUrl: '', supabaseKey: '', canManage: function () { return false; }, currency: '$', dock: true };
-  var overlay = null, raf = 0, adminBtn = null, adminPin = null, settingsCache = null;
+  var overlay = null, raf = 0, adminBtn = null, adminPin = null, settingsCache = null, wheelsCache = null;
 
   /* ---------- server calls ---------- */
   function rpc(fn, args) {
@@ -32,6 +47,18 @@
       });
   }
   function fetchSettings() { return rpc('rw_get_settings').then(function (s) { settingsCache = s; return s; }); }
+  /* All turned-on wheels, lowest sale amount first. If the extra wheels are not set up in the database yet, this falls back to the single original wheel. */
+  function fetchWheels() {
+    return rpc('rw_get_wheels').then(function (w) {
+      if (!Array.isArray(w) || !w.length) throw new Error('no wheels');
+      wheelsCache = w; return w;
+    }).catch(function () {
+      return fetchSettings().then(function (s) {
+        wheelsCache = [{ id: 1, name: 'Classic', min: Number(s.threshold), theme: 'classic', enabled: true, prizes: s.prizes }];
+        return wheelsCache;
+      });
+    });
+  }
 
   function rand() { var a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
   function money(n) { return cfg.currency + Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
@@ -85,7 +112,7 @@
     var employee = String(sale.employee || '');
     return rpc('rw_issue_code', { p_sale_id: sale.id != null ? String(sale.id) : null, p_employee: employee, p_amount: total })
       .then(function (r) {
-        if (r && r.ok) { showIssued({ code: r.code, employee: employee, amount: total }); return r.code; }
+        if (r && r.ok) { showIssued({ code: r.code, employee: employee, amount: total, wheel: r.wheel, wheelName: r.wheel_name }); return r.code; }
         return null;
       })
       .catch(function (e) {
@@ -106,7 +133,7 @@
     } }, 'Copy code');
     openModal('Reward wheel code', h('div', { class: 'gwrw-body' },
       h('p', null, rec.employee ? rec.employee + '\u2019s sale of ' : 'This sale of ', h('strong', null, money(rec.amount)),
-        ' qualifies for one spin. Give the customer this code. It works once.'),
+        ' qualifies for one spin' + (rec.wheel > 1 && rec.wheelName ? ' on the ' + rec.wheelName : '') + '. Give the customer this code. It works once.'),
       h('div', { class: 'gwrw-code' }, rec.code),
       h('div', { class: 'gwrw-row' }, copy, h('button', { class: 'gwrw-primary', onclick: closeModal }, 'Done'))));
   }
@@ -125,11 +152,11 @@
   }
   function tickSnd() { beep(900 + rand() * 200, .04, 'square', .03); }
   function winSnd() { [523, 659, 784, 1047].forEach(function (f, i) { setTimeout(function () { beep(f, .28, 'triangle', .06); }, i * 120); }); }
-  function confetti(cx, cy) {
+  function confetti(cx, cy, cols) {
     if (reduced) return;
     var cv = h('canvas', { class: 'gwrw-confetti' }); document.body.appendChild(cv);
     var w = cv.width = innerWidth, hh = cv.height = innerHeight, x = cv.getContext('2d'), P = [], t0 = performance.now();
-    var COL = ['#96d62a', '#ffd23f', '#ff6b9d', '#4cc9f0', '#b388ff', '#ffffff'];
+    var COL = cols || ['#96d62a', '#ffd23f', '#ff6b9d', '#4cc9f0', '#b388ff', '#ffffff'];
     for (var i = 0; i < 150; i++) { var an = rand() * TAU, sp = 4 + rand() * 9;
       P.push({ x: cx, y: cy, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp - 6, r: 3 + rand() * 4, rot: rand() * TAU, vr: (rand() - .5) * .4, c: COL[i % COL.length] }); }
     (function f(t) {
@@ -146,37 +173,43 @@
   }
   function drawWheel(cv, prizes, rot, fx) {
     fx = fx || {};
+    var th = THEMES[fx.theme] || THEMES.classic;
     var ctx = cv.getContext('2d'), s = cv.width, c = s / 2, R = c - 4, r = c - 26, total = sumW(prizes), a = -Math.PI / 2 + rot, t = reduced ? 0 : (fx.t || 0);
     ctx.clearRect(0, 0, s, s);
-    var rim = ctx.createLinearGradient(0, 0, s, s); rim.addColorStop(0, '#fff3b0'); rim.addColorStop(.5, '#e8a317'); rim.addColorStop(1, '#8a5a00');
-    ctx.beginPath(); ctx.arc(c, c, R, 0, TAU); ctx.fillStyle = rim; ctx.shadowColor = 'rgba(150,214,42,.55)'; ctx.shadowBlur = 24; ctx.fill(); ctx.shadowBlur = 0;
-    ctx.beginPath(); ctx.arc(c, c, r + 6, 0, TAU); ctx.fillStyle = '#0b1a10'; ctx.fill();
+    var rim = ctx.createLinearGradient(0, 0, s, s); rim.addColorStop(0, th.rim[0]); rim.addColorStop(.5, th.rim[1]); rim.addColorStop(1, th.rim[2]);
+    ctx.beginPath(); ctx.arc(c, c, R, 0, TAU); ctx.fillStyle = rim; ctx.shadowColor = th.glow; ctx.shadowBlur = 24; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(c, c, r + 6, 0, TAU); ctx.fillStyle = th.disc; ctx.fill();
+    if (th.ring) { ctx.beginPath(); ctx.arc(c, c, r + 3, 0, TAU); ctx.lineWidth = 3; ctx.strokeStyle = th.ring; ctx.stroke(); }
     var ph = Math.floor(t / 140);
-    for (var i = 0; i < 24; i++) {
-      var ang = i / 24 * TAU, lit = (i + ph) % 2 === 0;
-      ctx.beginPath(); ctx.arc(c + Math.cos(ang) * (R - 8), c + Math.sin(ang) * (R - 8), 4.5, 0, TAU);
-      ctx.fillStyle = lit ? '#fffbe0' : '#a8791a'; if (lit) { ctx.shadowColor = '#ffe066'; ctx.shadowBlur = 12; } ctx.fill(); ctx.shadowBlur = 0;
+    for (var i = 0; i < th.bulbs; i++) {
+      var ang = i / th.bulbs * TAU, lit = (i + ph) % 2 === 0, bx = c + Math.cos(ang) * (R - 8), by = c + Math.sin(ang) * (R - 8);
+      ctx.fillStyle = lit ? th.on : th.off; if (lit) { ctx.shadowColor = th.bglow; ctx.shadowBlur = 12; }
+      if (th.bulbShape === 'square') { ctx.save(); ctx.translate(bx, by); ctx.rotate(ang); ctx.fillRect(-4, -4, 8, 8); ctx.restore(); }
+      else { ctx.beginPath(); ctx.arc(bx, by, 4.5, 0, TAU); ctx.fill(); }
+      ctx.shadowBlur = 0;
     }
     prizes.forEach(function (p, idx) {
       var span = p.weight / total * TAU, col = safe(p.color);
       var gr = ctx.createRadialGradient(c, c, r * .12, c, c, r); gr.addColorStop(0, mix(col, .35)); gr.addColorStop(.6, col); gr.addColorStop(1, mix(col, -.25));
       ctx.beginPath(); ctx.moveTo(c, c); ctx.arc(c, c, r, a, a + span); ctx.closePath();
-      ctx.fillStyle = gr; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+      ctx.fillStyle = gr; ctx.fill(); ctx.lineWidth = th.sw; ctx.strokeStyle = th.stroke;
+      if (th.neon) { ctx.shadowColor = th.stroke; ctx.shadowBlur = 10; }
+      ctx.stroke(); ctx.shadowBlur = 0;
       if (fx.win === idx) { ctx.fillStyle = 'rgba(255,255,255,' + (.3 + .3 * Math.sin(t / 160)) + ')'; ctx.fill(); }
       if (span > 0.3) {
         ctx.save(); ctx.translate(c, c); ctx.rotate(a + span / 2); ctx.textAlign = 'right';
-        ctx.font = '800 ' + Math.round(s / 22) + 'px Inter, system-ui, sans-serif';
+        ctx.font = '800 ' + Math.round(s / 22) + 'px ' + th.font;
         var lb = p.label.length > 14 ? p.label.slice(0, 13) + '\u2026' : p.label;
-        ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.strokeText(lb, r - 16, 7);
-        ctx.fillStyle = '#fff'; ctx.fillText(lb, r - 16, 7); ctx.restore();
+        ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = th.shade; ctx.strokeText(lb, r - 16, 7);
+        ctx.fillStyle = th.label; ctx.fillText(lb, r - 16, 7); ctx.restore();
       }
       a += span;
     });
     var gl = ctx.createRadialGradient(c * .7, c * .6, 10, c, c, r); gl.addColorStop(0, 'rgba(255,255,255,.28)'); gl.addColorStop(.5, 'rgba(255,255,255,0)');
     ctx.beginPath(); ctx.arc(c, c, r, 0, TAU); ctx.fillStyle = gl; ctx.fill();
-    var hg = ctx.createRadialGradient(c - 6, c - 8, 2, c, c, s / 13); hg.addColorStop(0, '#f1ffc4'); hg.addColorStop(1, '#3f8f2a');
-    ctx.beginPath(); ctx.arc(c, c, s / 13, 0, TAU); ctx.fillStyle = hg; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = '#fff'; ctx.stroke();
-    ctx.fillStyle = '#0b1a10'; ctx.font = '800 ' + Math.round(s / 24) + 'px Inter, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('GW', c, c + 1); ctx.textBaseline = 'alphabetic';
+    var hg = ctx.createRadialGradient(c - 6, c - 8, 2, c, c, s / 13); hg.addColorStop(0, th.hub[0]); hg.addColorStop(1, th.hub[1]);
+    ctx.beginPath(); ctx.arc(c, c, s / 13, 0, TAU); ctx.fillStyle = hg; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = th.stroke; ctx.stroke();
+    ctx.fillStyle = th.hubText; ctx.font = '800 ' + Math.round(s / 24) + 'px ' + th.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(th.hubMark, c, c + 1); ctx.textBaseline = 'alphabetic';
   }
   function indexAt(prizes, rel) {
     var total = sumW(prizes), cum = 0;
@@ -185,7 +218,7 @@
   }
   function startLoop(cv, st) {
     (function f(t) {
-      if (st.pz) drawWheel(cv, st.pz, st.rot, { t: t, win: st.win });
+      if (st.pz) drawWheel(cv, st.pz, st.rot, { t: t, win: st.win, theme: st.theme });
       if (st.step) st.step(t);
       raf = requestAnimationFrame(f);
     })(performance.now());
@@ -213,16 +246,26 @@
     var input = h('input', { class: 'gwrw-input', placeholder: 'GW-XXXX-XXXX', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Wheel code' });
     var msg = h('p', { class: 'gwrw-msg', 'aria-live': 'polite' });
     var go = h('button', { class: 'gwrw-primary' }, 'Spin');
-    var busy = false, finished = false, usedCode = '';
-    var st = { rot: 0, win: -1, pz: null, step: null }, pointer = h('div', { class: 'gwrw-pointer' });
+    var busy = false, finished = false, usedCode = '', multi = false;
+    var st = { rot: 0, win: -1, pz: null, step: null, theme: 'classic' }, pointer = h('div', { class: 'gwrw-pointer' });
+    var wname = h('div', { class: 'gwrw-wname', 'aria-live': 'polite' });
     var mute = h('button', { class: 'gwrw-mute', type: 'button', onclick: function () { sound = !sound; mute.textContent = 'Sound: ' + (sound ? 'on' : 'off'); } }, 'Sound: on');
     function tick() { pointer.classList.remove('gwrw-tick'); void pointer.offsetWidth; pointer.classList.add('gwrw-tick'); tickSnd(); }
     var claimBox = h('div', { class: 'gwrw-claim' });
+    function applyTheme(t) {
+      var m = overlay && overlay.firstChild; if (!m) return;
+      Object.keys(THEMES).forEach(function (k) { m.classList.remove('gwrw-t-' + k); });
+      m.classList.add('gwrw-t-' + t);
+    }
 
-    fetchSettings().then(function (s) {
-      var pz = shown(s.prizes);
-      if (pz.length >= 2) st.pz = pz;
-      else { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'The wheel is not set up yet. Ask the owner to add rewards.'; }
+    /* Before a code is entered, show the lowest wheel. The code decides which wheel is actually spun. */
+    fetchWheels().then(function (ws) {
+      var w = ws[0], pz = shown(w.prizes);
+      multi = ws.length > 1;
+      if (pz.length >= 2) {
+        st.pz = pz; st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
+        wname.textContent = multi ? 'Enter your code to unlock your wheel' : '';
+      } else { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'The wheel is not set up yet. Ask the owner to add rewards.'; }
     }).catch(function (e) { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'Could not load the wheel: ' + e.message; });
 
     function showClaimForm() {
@@ -261,28 +304,35 @@
       busy = true; go.disabled = true; msg.className = 'gwrw-msg'; msg.textContent = 'Checking code\u2026';
       rpc('rw_redeem', { p_code: input.value }).then(function (res) {
         if (!res.ok) return fail(res.msg);
-        var pz = shown(res.prizes);
-        usedCode = input.value; input.disabled = true; msg.textContent = 'Spinning\u2026';
-        st.pz = pz; spinTo(st, pz, res.prize, function () {
-          finished = true; msg.className = 'gwrw-msg gwrw-win'; msg.textContent = 'You won: ' + res.prize.label + '!';
-          go.textContent = 'Close'; go.disabled = false;
-          winSnd(); var bb = cv.getBoundingClientRect(); confetti(bb.left + bb.width / 2, bb.top + bb.height / 2);
-          showClaimForm();
-        }, tick);
+        var w = res.wheel || { id: 1, name: 'Classic', theme: 'classic' }, pz = shown(res.prizes);
+        usedCode = input.value; input.disabled = true;
+        st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
+        st.pz = pz; st.rot = 0; st.win = -1; st.step = null;
+        wname.textContent = w.name || '';
+        msg.textContent = (multi && w.name ? w.name + ' unlocked. ' : '') + 'Spinning\u2026';
+        setTimeout(function () {
+          spinTo(st, pz, res.prize, function () {
+            finished = true; msg.className = 'gwrw-msg gwrw-win'; msg.textContent = 'You won: ' + res.prize.label + '!';
+            go.textContent = 'Close'; go.disabled = false;
+            winSnd(); var bb = cv.getBoundingClientRect(); confetti(bb.left + bb.width / 2, bb.top + bb.height / 2, THEMES[st.theme].confetti);
+            showClaimForm();
+          }, tick);
+        }, (multi && !reduced) ? 1000 : 0);
       }).catch(function (e) { fail(e.message); });
     }
     go.addEventListener('click', run);
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') run(); });
     openModal('Spin the wheel', h('div', { class: 'gwrw-body' },
+      wname,
       h('div', { class: 'gwrw-wheelbox' }, pointer, cv),
       h('div', { class: 'gwrw-row' }, input, go), mute, msg, claimBox));
-    overlay.firstChild.classList.add('gwrw-fun'); startLoop(cv, st);
+    overlay.firstChild.classList.add('gwrw-fun'); applyTheme(st.theme); startLoop(cv, st);
   }
 
   /* ---------- admin panel (no passphrase) ---------- */
   function openAdmin() {
     if (!can()) return;
-    var body = h('div', { class: 'gwrw-body' }), draft = null, codes = [];
+    var body = h('div', { class: 'gwrw-body' }), wl = [], drafts = {}, sel = 1, codes = [], legacy = false;
     openModal('Reward wheel settings', body, true);
     adminPin = ''; load();
 
@@ -290,25 +340,59 @@
       body.textContent = '';
       body.appendChild(h('p', { class: 'gwrw-msg gwrw-err' }, text));
     }
+    function wheelName(id) { return drafts[id] ? drafts[id].name : 'Wheel ' + id; }
     function load() {
       body.textContent = 'Loading\u2026';
-      Promise.all([fetchSettings(), rpc('rw_admin_codes', { p_pin: adminPin })]).then(function (r) {
-        draft = { threshold: Number(r[0].threshold), prizes: JSON.parse(JSON.stringify(r[0].prizes)) };
-        draft.prizes.forEach(function (p) { p.weight = Number(p.weight); });
-        codes = r[1]; render();
-      }).catch(function (e) { showError(e.message); });
+      rpc('rw_admin_wheels', { p_pin: adminPin }).then(function (r) { return Array.isArray(r) && r.length ? r : null; }, function () { return null; })
+        .then(function (r) {
+          if (r) { legacy = false; return r; }
+          legacy = true;      /* the extra wheels are not set up in the database yet: edit the single original wheel */
+          return fetchSettings().then(function (s) { return [{ id: 1, name: 'Classic', min: s.threshold, theme: 'classic', enabled: true, prizes: s.prizes }]; });
+        })
+        .then(function (w) {
+          wl = w; drafts = {};
+          w.forEach(function (x) {
+            var d = JSON.parse(JSON.stringify(x)); d.min = Number(d.min); d.enabled = x.id === 1 ? true : !!d.enabled;
+            d.prizes.forEach(function (p) { p.weight = Number(p.weight); }); drafts[x.id] = d;
+          });
+          if (!drafts[sel]) sel = w[0].id;
+          return rpc('rw_admin_codes', { p_pin: adminPin });
+        })
+        .then(function (c) { codes = c; render(); })
+        .catch(function (e) { showError(e.message); });
     }
     function reloadCodes() { rpc('rw_admin_codes', { p_pin: adminPin }).then(function (c) { codes = c; render(); }).catch(function (e) { showError(e.message); }); }
 
     function render() {
-      var total = draft.prizes.reduce(function (s, p) { return s + (p.weight > 0 ? p.weight : 0); }, 0);
+      var dr = drafts[sel], th = THEMES[dr.theme] || THEMES.classic;
+      var total = dr.prizes.reduce(function (s, p) { return s + (p.weight > 0 ? p.weight : 0); }, 0);
       var msg = h('p', { class: 'gwrw-msg', 'aria-live': 'polite' });
       function say(cls, t) { msg.className = 'gwrw-msg ' + cls; msg.textContent = t; }
 
-      var thr = h('input', { class: 'gwrw-input gwrw-narrow', type: 'number', min: '1', step: 'any', value: draft.threshold,
-        'aria-label': 'Sale amount that earns a code', oninput: function (e) { draft.threshold = Number(e.target.value); } });
+      var tabs = legacy ? null : h('div', { class: 'gwrw-tabs' }, wl.map(function (w) {
+        var d = drafts[w.id];
+        return h('button', { class: 'gwrw-btn gwrw-tab' + (w.id === sel ? ' gwrw-tab-on' : ''), type: 'button',
+          onclick: function () { sel = w.id; render(); } }, d.name + (w.id !== 1 && !d.enabled ? ' (off)' : ''));
+      }));
 
-      var rows = draft.prizes.map(function (p) {
+      var nameIn = h('input', { class: 'gwrw-input', value: dr.name, maxlength: '30', 'aria-label': 'Wheel name', oninput: function (e) { dr.name = e.target.value; } });
+      var styleSel = h('select', { class: 'gwrw-input', 'aria-label': 'Wheel style', onchange: function (e) { dr.theme = e.target.value; render(); } },
+        Object.keys(THEMES).map(function (k) { var o = h('option', { value: k }, THEMES[k].name); if (k === dr.theme) o.selected = true; return o; }));
+      var onBox = h('input', { type: 'checkbox', onchange: function (e) { dr.enabled = e.target.checked; render(); } });
+      onBox.checked = !!dr.enabled;
+
+      function rangeText() {
+        if (sel !== 1 && !dr.enabled) return 'This wheel is turned off. Sales in its range earn a code for the wheel below it.';
+        var mine = Number(dr.min);
+        var above = wl.filter(function (w) { return w.id !== sel && drafts[w.id].enabled && Number(drafts[w.id].min) > mine; })
+          .map(function (w) { return Number(drafts[w.id].min); }).sort(function (x, y) { return x - y; })[0];
+        return 'Sales from ' + money(mine) + (above ? ' to just under ' + money(above) : ' and up') + ' earn a code for this wheel.';
+      }
+
+      var thr = h('input', { class: 'gwrw-input gwrw-narrow', type: 'number', min: '1', step: 'any', value: dr.min,
+        'aria-label': 'Sale amount that earns a code', oninput: function (e) { dr.min = Number(e.target.value); }, onchange: function () { render(); } });
+
+      var rows = dr.prizes.map(function (p) {
         var pct = total > 0 && p.weight > 0 ? (p.weight / total * 100) : 0;
         return h('div', { class: 'gwrw-prize' },
           h('input', { type: 'color', value: p.color, 'aria-label': 'Colour for ' + p.label, onchange: function (e) { p.color = e.target.value; } }),
@@ -316,29 +400,34 @@
           h('input', { class: 'gwrw-input gwrw-narrow', type: 'number', min: '0', step: 'any', value: p.weight, 'aria-label': 'Weight for ' + p.label,
             onchange: function (e) { p.weight = Number(e.target.value); render(); } }),
           h('span', { class: 'gwrw-pct' }, pct.toFixed(1) + '%'),
-          h('button', { class: 'gwrw-btn', disabled: draft.prizes.length <= 2, title: draft.prizes.length <= 2 ? 'The wheel needs at least two rewards' : 'Remove reward',
-            onclick: function () { draft.prizes = draft.prizes.filter(function (x) { return x !== p; }); render(); } }, 'Remove'));
+          h('button', { class: 'gwrw-btn', disabled: dr.prizes.length <= 2, title: dr.prizes.length <= 2 ? 'The wheel needs at least two rewards' : 'Remove reward',
+            onclick: function () { dr.prizes = dr.prizes.filter(function (x) { return x !== p; }); render(); } }, 'Remove'));
       });
 
       var addBtn = h('button', { class: 'gwrw-btn', onclick: function () {
-        draft.prizes.push({ id: 'p' + Date.now().toString(36) + Math.floor(rand() * 1e4), label: 'New reward', weight: 10, color: PALETTE[draft.prizes.length % PALETTE.length] });
+        dr.prizes.push({ id: 'p' + Date.now().toString(36) + Math.floor(rand() * 1e4), label: 'New reward', weight: 10, color: th.palette[dr.prizes.length % th.palette.length] });
         render();
       } }, 'Add reward');
 
       var saveBtn = h('button', { class: 'gwrw-primary', onclick: function () {
         var bad = null;
-        if (!(draft.threshold > 0)) bad = 'The sale amount must be greater than 0.';
-        else if (draft.prizes.length < 2) bad = 'Add at least two rewards.';
-        else if (draft.prizes.some(function (p) { return !p.label.trim(); })) bad = 'Every reward needs a name.';
-        else if (draft.prizes.some(function (p) { return !isFinite(p.weight) || p.weight < 0; })) bad = 'Weights must be zero or higher.';
+        if (!legacy && !dr.name.trim()) bad = 'The wheel needs a name.';
+        else if (!(dr.min > 0)) bad = 'The sale amount must be greater than 0.';
+        else if (dr.prizes.length < 2) bad = 'Add at least two rewards.';
+        else if (dr.prizes.some(function (p) { return !p.label.trim(); })) bad = 'Every reward needs a name.';
+        else if (dr.prizes.some(function (p) { return !isFinite(p.weight) || p.weight < 0; })) bad = 'Weights must be zero or higher.';
         else if (!(total > 0)) bad = 'At least one reward needs a weight above 0.';
         if (bad) return say('gwrw-err', bad);
-        draft.prizes.forEach(function (p) { p.label = p.label.trim(); });
+        dr.prizes.forEach(function (p) { p.label = p.label.trim(); });
         saveBtn.disabled = true; say('', 'Saving\u2026');
-        rpc('rw_admin_save', { p_pin: adminPin, p_threshold: draft.threshold, p_prizes: draft.prizes })
-          .then(function () { settingsCache = { threshold: draft.threshold, prizes: draft.prizes }; saveBtn.disabled = false; say('gwrw-win', 'Saved. New settings apply to the next code and spin.'); })
-          .catch(function (e) { saveBtn.disabled = false; say('gwrw-err', e.message); });
-      } }, 'Save settings');
+        var call = legacy
+          ? rpc('rw_admin_save', { p_pin: adminPin, p_threshold: dr.min, p_prizes: dr.prizes })
+          : rpc('rw_admin_save_wheel', { p_pin: adminPin, p_id: dr.id, p_name: dr.name.trim(), p_min: dr.min, p_theme: dr.theme, p_enabled: sel === 1 ? true : !!dr.enabled, p_prizes: dr.prizes });
+        call.then(function () {
+          wheelsCache = null; fetchSettings().catch(function () {});
+          saveBtn.disabled = false; say('gwrw-win', 'Saved. New settings apply to the next code and spin.');
+        }).catch(function (e) { saveBtn.disabled = false; say('gwrw-err', e.message); });
+      } }, legacy ? 'Save settings' : 'Save this wheel');
 
       var codeMsg = h('p', { class: 'gwrw-msg', 'aria-live': 'polite' });
       function sayCode(t) {
@@ -362,21 +451,26 @@
               }).catch(function (e) { sayCode(e.message); });
             } }, 'Delete'));
         return h('tr', null, actions,
-          h('td', { class: 'gwrw-mono' }, c.code), h('td', null, c.employee || '-'), h('td', null, money(c.amount)),
+          h('td', { class: 'gwrw-mono' }, c.code), legacy ? null : h('td', null, wheelName(c.wheel_id || 1)), h('td', null, c.employee || '-'), h('td', null, money(c.amount)),
           h('td', null, new Date(c.created_at).toLocaleString()), h('td', null, status),
           h('td', null, c.claim_name ? c.claim_name + ' \u00b7 CID ' + c.claim_cid + ' \u00b7 ' + c.claim_phone : (c.used_at ? 'Not sent yet' : '-')));
       });
 
       body.textContent = '';
       body.appendChild(h('div', null,
-        h('label', { class: 'gwrw-label' }, 'A sale of this amount or more earns one code', h('div', null, cfg.currency, thr)),
+        legacy ? h('p', { class: 'gwrw-note' }, 'The extra wheels are not set up yet. Run wheels-setup.sql in Supabase once, then reopen this screen.') : null,
+        tabs,
+        legacy ? null : h('div', { class: 'gwrw-fields' }, h('label', null, 'Wheel name', nameIn), h('label', null, 'Wheel style', styleSel)),
+        (!legacy && sel !== 1) ? h('label', { class: 'gwrw-hint' }, onBox, ' Turned on (codes for this range spin this wheel)') : null,
+        h('label', { class: 'gwrw-label' }, legacy ? 'A sale of this amount or more earns one code' : 'A sale of this amount or more earns a code for this wheel', h('div', null, cfg.currency, thr)),
+        h('p', { class: 'gwrw-hint' }, rangeText()),
         h('h3', null, 'Rewards and chances'),
         h('p', { class: 'gwrw-hint' }, 'Weight is relative. A reward with weight 30 out of 100 total wins 30% of spins.'),
         h('div', { class: 'gwrw-prize gwrw-cols' }, h('span'), h('span', null, 'Reward'), h('span', null, 'Weight'), h('span', null, 'Chance'), h('span')),
         rows, h('div', { class: 'gwrw-row' }, addBtn, saveBtn), msg,
         h('h3', null, 'Latest codes'), codeMsg,
         codes.length ? h('div', { class: 'gwrw-scroll' }, h('table', { class: 'gwrw-table' },
-          h('thead', null, h('tr', null, h('th', null, 'Actions'), h('th', null, 'Code'), h('th', null, 'Employee'), h('th', null, 'Sale'), h('th', null, 'Created'), h('th', null, 'Status'), h('th', null, 'Player details'))),
+          h('thead', null, h('tr', null, h('th', null, 'Actions'), h('th', null, 'Code'), legacy ? null : h('th', null, 'Wheel'), h('th', null, 'Employee'), h('th', null, 'Sale'), h('th', null, 'Created'), h('th', null, 'Status'), h('th', null, 'Player details'))),
           h('tbody', null, list))) : h('p', { class: 'gwrw-hint' }, 'No codes yet. One is created when a sale reaches the amount above.')));
     }
   }
@@ -434,7 +528,33 @@
       '.gwrw-pointer{border-top-color:#ffd23f;transform-origin:50% 0}.gwrw-mute{background:none;border:0;color:#84a06d;font:600 12px system-ui,sans-serif;cursor:pointer;margin:10px auto 0;display:block}',
       '.gwrw-confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:10000}',
       '.gwrw-dock .gwrw-fab:not(.gwrw-fab-alt){background:linear-gradient(180deg,#b6f03d,#7fc41a);color:#0a1206;border-color:#b6f03d;font-weight:700}',
-      '@media (prefers-reduced-motion:no-preference){@keyframes gwrw-pulse{0%{box-shadow:0 0 0 0 rgba(150,214,42,.55)}100%{box-shadow:0 0 0 18px rgba(150,214,42,0)}}@keyframes gwrw-wiggle{0%,88%,100%{transform:rotate(0)}91%{transform:rotate(-4deg)}94%{transform:rotate(4deg)}97%{transform:rotate(-3deg)}}@keyframes gwrw-in{from{opacity:0;transform:translateY(14px) scale(.96)}}@keyframes gwrw-winpop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}@keyframes gwrw-flick{0%{transform:translateX(-50%) rotate(-16deg)}100%{transform:translateX(-50%) rotate(0)}}.gwrw-tick{animation:gwrw-flick .14s ease-out}.gwrw-dock .gwrw-fab:not(.gwrw-fab-alt){animation:gwrw-pulse 2.2s ease-out infinite,gwrw-wiggle 6s ease-in-out infinite}.gwrw-modal{animation:gwrw-in .4s cubic-bezier(.16,1,.3,1)}.gwrw-fun .gwrw-win{animation:gwrw-winpop .6s cubic-bezier(.16,1,.3,1)}}'
+      '@media (prefers-reduced-motion:no-preference){@keyframes gwrw-pulse{0%{box-shadow:0 0 0 0 rgba(150,214,42,.55)}100%{box-shadow:0 0 0 18px rgba(150,214,42,0)}}@keyframes gwrw-wiggle{0%,88%,100%{transform:rotate(0)}91%{transform:rotate(-4deg)}94%{transform:rotate(4deg)}97%{transform:rotate(-3deg)}}@keyframes gwrw-in{from{opacity:0;transform:translateY(14px) scale(.96)}}@keyframes gwrw-winpop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}@keyframes gwrw-flick{0%{transform:translateX(-50%) rotate(-16deg)}100%{transform:translateX(-50%) rotate(0)}}.gwrw-tick{animation:gwrw-flick .14s ease-out}.gwrw-dock .gwrw-fab:not(.gwrw-fab-alt){animation:gwrw-pulse 2.2s ease-out infinite,gwrw-wiggle 6s ease-in-out infinite}.gwrw-modal{animation:gwrw-in .4s cubic-bezier(.16,1,.3,1)}.gwrw-fun .gwrw-win{animation:gwrw-winpop .6s cubic-bezier(.16,1,.3,1)}}',
+      '.gwrw-wname{text-align:center;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:13px;min-height:1.4em;margin:0 0 10px;color:#96d62a}',
+      '.gwrw-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}',
+      '.gwrw-btn.gwrw-tab-on{background:#1f8a4c!important;color:#fff!important;border-color:#1f8a4c!important}',
+      '.gwrw-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 12px}.gwrw-fields label{display:block;font-weight:600;font-size:14px}.gwrw-fields .gwrw-input{width:100%;margin-top:4px}',
+      '.gwrw-note{background:#fff7e0;border:1px solid #e8c25a;border-radius:10px;padding:10px 12px;font-size:14px;color:#5a4300!important;margin:0 0 14px}',
+      '@media (max-width:520px){.gwrw-fields{grid-template-columns:1fr}}',
+      '.gwrw-modal.gwrw-fun{background:linear-gradient(165deg,#12381f,#07100a 70%)!important;color:#eaf3e2!important}',
+      '.gwrw-fun .gwrw-input,.gwrw-fun .gwrw-code{background:#0d1d12!important;color:#eaf3e2!important;border-color:#2f6a3a!important}',
+      '.gwrw-fun .gwrw-btn{background:#0d1d12!important;color:#eaf3e2!important;border-color:#2f6a3a!important}',
+      '.gwrw-fun .gwrw-x,.gwrw-fun .gwrw-label{color:#eaf3e2!important}',
+      '.gwrw-fun .gwrw-hint{color:#84a06d!important}',
+      '.gwrw-fun .gwrw-head,.gwrw-fun .gwrw-claim:not(:empty){border-color:#2a4d32!important}',
+      '.gwrw-modal.gwrw-t-gold{background:linear-gradient(165deg,#2b1d06,#0f0a02 72%)!important;color:#fbefd0!important;border:1px solid #b8860b;box-shadow:0 20px 70px rgba(0,0,0,.65),0 0 70px rgba(255,200,60,.22)}',
+      '.gwrw-t-gold .gwrw-head{border-color:#5e4410!important}.gwrw-t-gold .gwrw-head h2{color:#ffd34d;font-family:Georgia,"Times New Roman",serif;letter-spacing:.05em}',
+      '.gwrw-t-gold .gwrw-x,.gwrw-t-gold .gwrw-label{color:#fbefd0!important}',
+      '.gwrw-t-gold .gwrw-input,.gwrw-t-gold .gwrw-btn{background:#1a1204!important;color:#fbefd0!important;border-color:#8c6a1a!important}',
+      '.gwrw-t-gold .gwrw-primary{background:linear-gradient(180deg,#ffe08a,#d4a21c);color:#2a1c00;border-color:#ffe08a;box-shadow:0 6px 20px rgba(255,200,60,.35)}',
+      '.gwrw-t-gold .gwrw-hint{color:#c9a85a!important}.gwrw-t-gold .gwrw-mute{color:#c9a85a}.gwrw-t-gold .gwrw-win{color:#ffd34d}.gwrw-t-gold .gwrw-claim:not(:empty){border-color:#5e4410!important}',
+      '.gwrw-t-gold .gwrw-pointer{border-top-color:#ffe08a}.gwrw-t-gold .gwrw-wname{color:#ffd34d;font-family:Georgia,"Times New Roman",serif}',
+      '.gwrw-modal.gwrw-t-neon{background:linear-gradient(165deg,#120a3a,#050312 72%)!important;color:#e6fbff!important;border:1px solid #7a3cff;box-shadow:0 20px 70px rgba(0,0,0,.7),0 0 70px rgba(122,60,255,.4)}',
+      '.gwrw-t-neon .gwrw-head{border-color:#34208a!important}.gwrw-t-neon .gwrw-head h2{color:#7df9ff;font-family:"Courier New",ui-monospace,monospace;text-transform:uppercase;letter-spacing:.12em;text-shadow:0 0 12px rgba(125,249,255,.6)}',
+      '.gwrw-t-neon .gwrw-x,.gwrw-t-neon .gwrw-label{color:#e6fbff!important}',
+      '.gwrw-t-neon .gwrw-input,.gwrw-t-neon .gwrw-btn{background:#0b0724!important;color:#e6fbff!important;border-color:#5b3ad6!important}',
+      '.gwrw-t-neon .gwrw-primary{background:linear-gradient(180deg,#7df9ff,#3cc8ff);color:#050312;border-color:#7df9ff;box-shadow:0 0 22px rgba(60,240,255,.5)}',
+      '.gwrw-t-neon .gwrw-hint{color:#9a8cff!important}.gwrw-t-neon .gwrw-mute{color:#9a8cff}.gwrw-t-neon .gwrw-win{color:#7df9ff;text-shadow:0 0 10px rgba(125,249,255,.6)}.gwrw-t-neon .gwrw-claim:not(:empty){border-color:#34208a!important}',
+      '.gwrw-t-neon .gwrw-pointer{border-top-color:#7df9ff}.gwrw-t-neon .gwrw-wname{color:#7df9ff;font-family:"Courier New",ui-monospace,monospace;text-shadow:0 0 10px rgba(125,249,255,.5)}'
     ].join('\n');
     var el = document.createElement('style'); el.textContent = css; document.head.appendChild(el);
   }
