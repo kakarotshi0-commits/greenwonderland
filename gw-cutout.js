@@ -1,11 +1,15 @@
 /* gw-cutout.js — Green Wonderland
  * Makes menu photos with a solid-colour background transparent, so they blend into the card.
  *
+ *  0) AUTOMATIC: every photo shown on the public Menu is made transparent as the page draws it, so ALL photos
+ *     (old and new) look cut-out for every visitor, with nothing to press. Photos it cannot cut out cleanly are
+ *     shown as they were.
  *  1) NEW UPLOADS: replaces readImageCompressed() so every menu photo you add or change is cut out
  *     automatically and saved with transparency (WebP/PNG instead of JPEG, which cannot be transparent).
  *     Photos that are already transparent keep their transparency.
- *  2) EXISTING PHOTOS: adds a "Make photos transparent" button next to "Save menu". Press it once, check the
- *     result, then press "Save menu" to publish for everyone. (Reload the shared menu to undo before saving.)
+ *  2) OPTIONAL, makes it permanent: a "Make photos transparent" button next to "Save menu" converts the stored
+ *     photos themselves. Press it once, check the result, then press "Save menu". (Visitors then skip the
+ *     automatic step, so the menu loads a little faster.)
  *
  * Install: add  <script src="gw-cutout.js?v=1"></script>  at the bottom of index.html,
  * after the existing inline scripts (next to gw-dark-photos.js).
@@ -107,7 +111,9 @@
 
   function loadImage(src) {
     return new Promise(function (res, rej) {
-      var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = src;
+      var i = new Image();
+      if (!/^(data|blob):/i.test(src)) i.crossOrigin = 'anonymous';   // remote photos need CORS to be readable
+      i.onload = function () { res(i); }; i.onerror = rej; i.src = src;
     });
   }
   function fileToDataUrl(file) {
@@ -177,4 +183,70 @@
         (skipped.length ? 'Left as they were: ' + skipped.join(', ') + '.' : '');
     });
   }
+
+  // 0) automatic: make every photo on the public menu transparent as it is drawn
+  var css = document.createElement('style');
+  css.textContent =
+    '.product-media[data-gw-wait] .photo{opacity:0}' +
+    // a cut-out photo always sits on the normal light tile, whatever the dark-photo fallback script decided
+    '.product-media[data-gw-cut]{background:radial-gradient(ellipse at 50% 35%,#d7dfbd,#aebe91 75%) !important}' +
+    '.card .product-media[data-gw-cut] .photo{padding:18px !important;mix-blend-mode:multiply !important;' +
+    'filter:saturate(.78) contrast(1.03) !important;-webkit-mask-image:none !important;mask-image:none !important}' +
+    '@media(max-width:420px){.card .product-media[data-gw-cut] .photo{padding:10px !important}}';
+  document.head.appendChild(css);
+
+  var results = new Map();     // original photo -> result, so each photo is processed once per visit
+  var inflight = new Map();
+  var queue = Promise.resolve();
+  var busy = 0;                // photos still being processed
+
+  function request(src) {
+    if (inflight.has(src)) return;
+    busy++;
+    var p = new Promise(function (resolve) {
+      queue = queue.then(function () {
+        return process(src).catch(function () { return { fail: 'unreadable' }; }).then(function (r) {
+          results.set(src, r); busy--; resolve();
+          return new Promise(function (t) { setTimeout(t, 0); });   // let the page breathe between photos
+        });
+      });
+    });
+    inflight.set(src, p);
+    p.then(autoClean);
+  }
+
+  function autoClean() {
+    var grid = document.getElementById('grid');
+    if (!grid) return;
+    grid.querySelectorAll('.product-media').forEach(function (media) {
+      var img = media.querySelector('img.photo');
+      if (!img || media.dataset.gwSeen) return;
+      var src = img.getAttribute('src');
+      if (!src) return;
+      var r = results.get(src);
+      if (r) {
+        media.removeAttribute('data-gw-wait');
+        media.dataset.gwSeen = '1';
+        if (r.cut) img.src = r.url;
+        if (r.cut || r.already) media.setAttribute('data-gw-cut', '');
+        return;
+      }
+      media.setAttribute('data-gw-wait', '');
+      request(src);
+    });
+  }
+  // never leave a photo hidden if something goes wrong
+  setInterval(function () {
+    document.querySelectorAll('#grid .product-media[data-gw-wait]').forEach(function (m) {
+      if (!busy) m.removeAttribute('data-gw-wait');
+    });
+  }, 6000);
+
+  if (typeof renderMenu === 'function') {
+    var baseRender = renderMenu;
+    renderMenu = function () { var out = baseRender.apply(this, arguments); autoClean(); return out; };
+  }
+  var gridEl = document.getElementById('grid');
+  if (gridEl) new MutationObserver(autoClean).observe(gridEl, { childList: true });
+  autoClean();
 })();
