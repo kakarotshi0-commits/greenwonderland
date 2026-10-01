@@ -1,0 +1,148 @@
+/* gw-cutout.js — Green Wonderland
+ * Makes menu photos with a solid-colour background transparent, so they blend into the card.
+ *
+ *  1) NEW UPLOADS: replaces readImageCompressed() so every menu photo you add or change is cut out
+ *     automatically and saved with transparency (WebP/PNG instead of JPEG, which cannot be transparent).
+ *     Photos that are already transparent keep their transparency.
+ *  2) EXISTING PHOTOS: adds a "Make photos transparent" button next to "Save menu". Press it once, check the
+ *     result, then press "Save menu" to publish for everyone. (Reload the shared menu to undo before saving.)
+ *
+ * Install: add  <script src="gw-cutout.js?v=1"></script>  at the bottom of index.html,
+ * after the existing inline scripts (next to gw-dark-photos.js).
+ * Tuning: BOUND = how different from the background colour a pixel may be and still be removed.
+ */
+(function () {
+  // pure pixel core, shared logic (copied into gw-cutout.js)
+  function gwCutoutPixels(d, w, h, opts) {
+    opts = opts || {};
+    var N = w * h;
+    var STEP = opts.step || 14, BOUND = opts.bound || 70;
+    // 1. background colour = median colour of the outer 2px ring
+    var R = [], G = [], B = [], A = 0, ring = 0;
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      if (x > 1 && x < w - 2 && y > 1 && y < h - 2) continue;
+      var i = (y * w + x) * 4; ring++; A += d[i + 3];
+      R.push(d[i]); G.push(d[i + 1]); B.push(d[i + 2]);
+    }
+    if (A / ring < 200) return { ok: false, transparent: true, why: 'already transparent' };
+    function med(a) { a.sort(function (p, q) { return p - q; }); return a[a.length >> 1]; }
+    var bg = [med(R), med(G), med(B)];
+    // edge must be fairly uniform to count as a solid background
+    var off = 0;
+    for (var k = 0; k < R.length; k++) {
+      var dr = R[k] - bg[0], dg = G[k] - bg[1], db = B[k] - bg[2];
+      if (Math.sqrt(dr * dr + dg * dg + db * db) > BOUND) off++;
+    }
+    if (off / R.length > 0.12) return { ok: false, why: 'edge is not a solid colour' };
+    // 2. flood fill inward from the edge
+    function near(p) { var o = p * 4, dr = d[o] - bg[0], dg = d[o + 1] - bg[1], db = d[o + 2] - bg[2]; return Math.sqrt(dr * dr + dg * dg + db * db) <= BOUND; }
+    function step(p, q) { var a = p * 4, b = q * 4, dr = d[a] - d[b], dg = d[a + 1] - d[b + 1], db = d[a + 2] - d[b + 2]; return Math.sqrt(dr * dr + dg * dg + db * db) <= STEP; }
+    var isbg = new Uint8Array(N), queue = new Int32Array(N), qh = 0, qt = 0;
+    for (var p0 = 0; p0 < N; p0++) {
+      var X = p0 % w, Y = (p0 / w) | 0;
+      if ((X === 0 || X === w - 1 || Y === 0 || Y === h - 1) && near(p0)) { isbg[p0] = 1; queue[qt++] = p0; }
+    }
+    while (qh < qt) {
+      var p = queue[qh++], px = p % w, py = (p / w) | 0, nb = [];
+      if (px > 0) nb.push(p - 1); if (px < w - 1) nb.push(p + 1); if (py > 0) nb.push(p - w); if (py < h - 1) nb.push(p + w);
+      for (var n = 0; n < nb.length; n++) { var q = nb[n]; if (!isbg[q] && near(q) && step(p, q)) { isbg[q] = 1; queue[qt++] = q; } }
+    }
+    var cover = qt / N;
+    if (cover < 0.08) return { ok: false, why: 'background not found' };
+    if (cover > 0.97) return { ok: false, why: 'nothing left of the product' };
+    if (isbg[(h >> 1) * w + (w >> 1)]) return { ok: false, why: 'centre looks like background' };
+    // 3. product mask: erode 1px (kills the coloured fringe), blur 3x3 for a soft edge
+    var m = new Uint8Array(N);
+    for (var a = 0; a < N; a++) m[a] = isbg[a] ? 0 : 1;
+    var e = new Uint8Array(N);
+    for (var yy = 1; yy < h - 1; yy++) for (var xx = 1; xx < w - 1; xx++) {
+      var pp = yy * w + xx;
+      e[pp] = (m[pp] && m[pp - 1] && m[pp + 1] && m[pp - w] && m[pp + w]) ? 1 : 0;
+    }
+    for (var by = 0; by < h; by++) for (var bx = 0; bx < w; bx++) {
+      var s = 0, c = 0;
+      for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+        var ax = bx + dx, ay = by + dy;
+        if (ax < 0 || ay < 0 || ax >= w || ay >= h) { c++; continue; }
+        s += e[ay * w + ax]; c++;
+      }
+      d[(by * w + bx) * 4 + 3] = Math.round(255 * s / c);
+    }
+    return { ok: true, cover: cover };
+  }
+
+  var SIZE = 500;
+
+  function loadImage(src) {
+    return new Promise(function (res, rej) {
+      var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = src;
+    });
+  }
+  function fileToDataUrl(file) {
+    return new Promise(function (res, rej) {
+      var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r.readAsDataURL(file);
+    });
+  }
+  function encode(canvas) {                      // WebP keeps transparency at a small size; PNG is the fallback
+    var out = canvas.toDataURL('image/webp', 0.88);
+    return out.indexOf('data:image/webp') === 0 ? out : canvas.toDataURL('image/png');
+  }
+
+  // Returns { url, cut } or { fail: reason }. cut = true when a background was removed.
+  async function process(src, maxSize) {
+    var img = await loadImage(src);
+    var s = Math.min(1, (maxSize || SIZE) / Math.max(img.naturalWidth, img.naturalHeight));
+    var w = Math.max(1, Math.round(img.naturalWidth * s)), h = Math.max(1, Math.round(img.naturalHeight * s));
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    var x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0, w, h);
+    var id = x.getImageData(0, 0, w, h);
+    var r = gwCutoutPixels(id.data, w, h);
+    if (r.ok) { x.putImageData(id, 0, 0); return { url: encode(c), cut: true }; }
+    if (r.transparent) return { url: encode(c), cut: false, already: true };
+    return { fail: r.why };
+  }
+  window.gwCutout = process;
+
+  // 1) new uploads
+  var original = window.readImageCompressed;
+  window.readImageCompressed = async function (file, maxSize) {
+    try {
+      if (file && file.type && file.type.indexOf('image/') === 0 && file.type !== 'image/gif') {
+        var res = await process(await fileToDataUrl(file), maxSize);
+        if (res.url) return res.url;
+      }
+    } catch (e) { /* fall back to the normal upload below */ }
+    return original(file, maxSize);
+  };
+
+  // 2) existing photos
+  var save = document.getElementById('saveMenu');
+  if (save && !document.getElementById('gwCutAll')) {
+    var btn = document.createElement('button');
+    btn.className = 'btn small'; btn.id = 'gwCutAll'; btn.type = 'button';
+    btn.textContent = 'Make photos transparent'; btn.style.marginLeft = '8px';
+    save.insertAdjacentElement('afterend', btn);
+    btn.addEventListener('click', async function () {
+      var msg = document.getElementById('menuMsg');
+      btn.disabled = true; msg.textContent = 'Working on your photos…';
+      var done = 0, skipped = [];
+      for (var k = 0; k < STATE.menu.length; k++) {
+        var it = STATE.menu[k];
+        if (!it.photo) continue;
+        try {
+          var r = await process(it.photo);
+          if (r.cut) { it.photo = r.url; done++; }
+          else if (r.fail) skipped.push(it.name + ' (' + r.fail + ')');
+        } catch (e) { skipped.push(it.name + ' (could not read)'); }
+      }
+      btn.disabled = false;
+      if (typeof renderMenuAdmin === 'function') renderMenuAdmin();
+      if (typeof renderMenu === 'function') renderMenu();
+      msg = document.getElementById('menuMsg');
+      msg.textContent = done + ' photo' + (done === 1 ? '' : 's') + ' made transparent. ' +
+        (done ? 'Check the menu, then press "Save menu" to publish for everyone. ' : '') +
+        (skipped.length ? 'Left as they were: ' + skipped.join(', ') + '.' : '');
+    });
+  }
+})();
