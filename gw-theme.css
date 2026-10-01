@@ -1,0 +1,31 @@
+html:root{color-scheme:dark;--bg:#030704;--panel:#0a120b;--panel2:#111c12;--text:#e9f2e1;--muted:#8aa575;--lime:#96d62a;--lime-dim:#3f6b16;--line:rgba(150,220,90,.14)}
+body{background:radial-gradient(ellipse 900px 480px at 85% -10%,rgba(150,214,42,.09),transparent 60%),#030704}
+header{background:rgba(3,7,4,.92)}
+section{padding:56px 0;border-top:1px solid var(--line)}
+.hero{border-top:0}
+.section-head{border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:22px}
+.section-head h2{border-left:3px solid var(--lime);padding-left:12px;font-size:1.7rem}
+.tools{display:grid;gap:12px;border:0;padding:0}
+#search{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 14px}
+#categoryFilters{display:flex!important;gap:8px;overflow-x:auto;padding-bottom:4px}
+.chip{white-space:nowrap}
+.gw-hide{display:none!important}
+.card,.staff{background:var(--panel)}
+.card2{background:var(--panel);border-radius:14px;padding:22px;margin-top:18px}
+.staffgrid{gap:12px;background:none;border:0}
+.staff{border:1px solid var(--line);border-radius:14px}
+input:not([type=checkbox]):not([type=color]):not([type=file]),select,textarea{background:var(--panel2)!important;color:var(--text)!important;border:1px solid var(--line)!important;border-radius:8px}
+#admin .wrap>div{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:18px}
+#admin .wrap>.section-head{background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:0 0 12px}
+#admin h3{margin:0 0 10px!important;color:var(--lime);font-family:Inter,sans-serif;font-size:1.05rem}
+.product-media.illustrated{background:radial-gradient(ellipse at 50% 35%,#d7dfbd,#aebe91 75%);border:0}
+.illustrated .icon{color:#3f5a2b;filter:none}
+.illustrated span{color:#4d6638}
+.gw-favlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin:12px 0}
+.gw-favlist label{display:flex;gap:8px;align-items:center}
+.gwrw-modal{background:#0a120b!important;color:var(--text)!important}
+.gwrw-head,.gwrw-table th,.gwrw-table td,.gwrw-claim:not(:empty){border-color:var(--line)!important}
+.gwrw-x,.gwrw-label{color:var(--text)!important}
+.gwrw-hint,.gwrw-cols{color:var(--muted)!important}
+.gwrw-input,.gwrw-code{background:var(--panel2)!important;color:var(--text)!important;border-color:var(--line)!important}
+.gwrw-btn,.gwrw-fab-alt{background:var(--panel2)!important;color:var(--lime)!important}
