@@ -11,12 +11,13 @@
     var s = 48, c = document.createElement('canvas'); c.width = c.height = s;
     var x = c.getContext('2d', { willReadFrequently: true });
     x.drawImage(t, 0, 0, s, s);
-    var d = x.getImageData(0, 0, s, s).data, R = [], G = [], B = [];
+    var d = x.getImageData(0, 0, s, s).data, R = [], G = [], B = [], A = 0, n = 0;
     for (var py = 0; py < s; py++) for (var px = 0; px < s; px++) {
       if (px > 1 && px < s - 2 && py > 1 && py < s - 2) continue;
-      var i = (py * s + px) * 4; R.push(d[i]); G.push(d[i + 1]); B.push(d[i + 2]);
+      var i = (py * s + px) * 4; R.push(d[i]); G.push(d[i + 1]); B.push(d[i + 2]); A += d[i + 3]; n++;
     }
     function med(a) { a.sort(function (p, q) { return p - q; }); return a[a.length >> 1]; }
+    if (A / n < 200) return null; // transparent cut-out: leave the light tile alone
     return [med(R), med(G), med(B)];
   }
   function mark(media, e) {
@@ -31,7 +32,7 @@
     if (!img) return;
     media.dataset.gwDark = '1';
     var src = img.currentSrc || img.src;
-    if (cache[src]) return mark(media, cache[src]);
+    if (src in cache) return mark(media, cache[src]);
     var t = new Image(); t.crossOrigin = 'anonymous';
     t.onload = function () { try { cache[src] = edgeOf(t); mark(media, cache[src]); } catch (e) {} };
     t.src = src;
