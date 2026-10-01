@@ -52,7 +52,7 @@
     } else {
       person = STATE.roster.find(p => p.pin === pin) || null; // before the first shared save
     }
-    window.gwPin = person && isTop(person) ? pin : null;   // kept in memory only
+    window.gwPin = person ? pin : null;   // kept in memory only; the server re-checks it on every request
     setTimeout(authChanged, 0);
     return person;
   };
