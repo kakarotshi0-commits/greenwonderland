@@ -31,7 +31,7 @@ input:not([type=checkbox]):not([type=color]):not([type=file]),select,textarea{ba
 .gwrw-btn,.gwrw-fab-alt{background:var(--panel2)!important;color:var(--lime)!important}
 
 /* ---- Light theme: cards, buttons and hero (the base stylesheet hard-codes dark colours for these) ---- */
-.hero{background:linear-gradient(180deg,var(--panel2),var(--bg))}
+.hero{background:linear-gradient(180deg,rgba(234,242,223,.55),rgba(244,248,238,0))}
 .card{background:#fff;border:1px solid var(--line);box-shadow:0 1px 4px rgba(20,40,10,.08)}
 .card:hover{background:#fff;border-color:var(--lime);box-shadow:0 8px 22px rgba(20,40,10,.14)}
 .card .cat{color:var(--muted)}
@@ -52,4 +52,21 @@ input:not([type=checkbox]):not([type=color]):not([type=file]),select,textarea{ba
   @supports (-webkit-background-clip: text) or (background-clip: text){
     .hero h1 span{background:linear-gradient(105deg,var(--lime) 0 42%,#7cc544 50%,var(--lime) 58% 100%) 100% 0 / 250% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
   }
+}
+
+/* ---- Light theme: animation colours (the base animation file uses glows made for a dark page) ---- */
+@media (prefers-reduced-motion: no-preference){
+  @keyframes gw-glow{50%{box-shadow:inset 0 0 24px rgba(47,125,31,.14)}}
+  @keyframes gw-breathe{50%{box-shadow:0 0 0 8px rgba(47,125,31,.08),0 0 30px rgba(47,125,31,.12)}}
+  .gw-orb.o1{background:radial-gradient(circle,rgba(124,197,68,.30),transparent 62%)}
+  .gw-orb.o2{background:radial-gradient(circle,rgba(79,184,154,.24),transparent 62%)}
+  .gw-orb.o3{background:radial-gradient(circle,rgba(168,216,106,.30),transparent 62%)}
+  .gw-ambient::before{background:radial-gradient(circle,rgba(242,211,106,.22),transparent 62%)}
+  .gw-ambient::after{background-image:radial-gradient(rgba(47,125,31,.22) 1px,transparent 1.6px)}
+  .gw-progress{box-shadow:0 0 10px rgba(47,125,31,.35)}
+  .gw-cursor{background:radial-gradient(circle,rgba(47,125,31,.09),transparent 62%)}
+  .card::before,.gallery-photo::before,.staff::before{background:radial-gradient(340px circle at var(--mx,50%) var(--my,50%),rgba(47,125,31,.10),transparent 60%)}
+  .crest:before{border-color:rgba(47,125,31,.40)}
+  .crest:after{border-color:rgba(47,125,31,.28)}
+  input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(47,125,31,.18)}
 }
