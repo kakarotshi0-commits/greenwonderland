@@ -19,6 +19,10 @@
     if (Array.isArray(cached) && cached.length) { favs = cached; loaded = true; favMode = true; }
   } catch (e) {}
 
+  /* First-time visitors have no saved copy yet: keep the menu hidden for a moment so the full menu never flashes before favourites load */
+  function release() { if (grid) grid.style.visibility = ''; }
+  if (!loaded && grid) { grid.style.visibility = 'hidden'; setTimeout(release, 2500); }
+
   /* --- page order: customer content first, staff sign-in and admin last --- */
   var foot = document.querySelector('footer');
   ['staff', 'admin'].forEach(function (id) { var s = document.getElementById(id); if (s && foot) foot.parentNode.insertBefore(s, foot); });
@@ -109,6 +113,6 @@
   rpc('gw_get_favourites').then(function (items) {
     favs = Array.isArray(items) ? items : []; loaded = true; remember();
     if (!touched) favMode = favs.length > 0;
-    apply(); sync();
-  }).catch(function () { loaded = true; });
+    apply(); sync(); release();
+  }).catch(function () { loaded = true; release(); });
 })();
