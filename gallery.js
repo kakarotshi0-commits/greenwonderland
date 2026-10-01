@@ -2,16 +2,34 @@
   const API = 'https://wtiefpuczygmyjaampdg.supabase.co';
   const KEY = 'sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif';
   const PAGE = 12;
-  let communityLimit = PAGE, busy = false;
+  let communityLimit = PAGE, busy = false, again = false;
   const previews = new Map();
   const $ = id => document.getElementById(id);
-  const canUploadCrew = () => !!signedIn && getPerms(signedIn.role).crewPhotos;
+  // Any signed-in crew member can add a crew photo (staff: only their own). Only the Owner can remove one.
+  const TOP = ['owner', 'admin', 'administrator'];
+  const roleOf = () => String((signedIn && signedIn.role) || '').trim().toLowerCase();
+  const canUploadCrew = () => !!signedIn;
+  const isTop = () => !!signedIn && TOP.includes(roleOf());
+  const isOwner = () => !!signedIn && roleOf() === 'owner';
+  function getPin(message) {   // the code is kept in memory only; ask again if this tab lost it
+    if (!window.gwPin) { const p = window.prompt(message || 'Enter your staff code to continue:'); if (p && p.trim()) window.gwPin = p.trim(); }
+    return window.gwPin || '';
+  }
   const crewUpload = $('crewPhotoForm').closest('details');
   const crewNotice = document.createElement('p');
   crewNotice.className = 'gallery-permission-note';
-  crewNotice.textContent = 'Only the Owner can add crew photos. Sign in through the Crew panel.';
+  crewNotice.textContent = 'Sign in through the Crew panel to add your crew photo.';
   crewUpload.before(crewNotice);
+  function fillMembers() {   // Owner/Admin choose anyone; everyone else sees only themselves
+    const sel = $('crewPhotoMember'), cur = sel.value;
+    const list = isTop() ? STATE.roster : STATE.roster.filter(p => signedIn && p.id === signedIn.id);
+    sel.replaceChildren();
+    if (isTop() || !list.length) { const ph = document.createElement('option'); ph.value = ''; ph.textContent = 'Choose a crew member'; sel.append(ph); }
+    list.forEach(person => { const o = document.createElement('option'); o.value = person.id; o.textContent = person.name + ' \u00b7 ' + person.role; sel.append(o); });
+    sel.value = isTop() ? (list.some(p => p.id === cur) ? cur : '') : (list[0] ? list[0].id : '');
+  }
   function updateCrewPermission() {
+    fillMembers();
     const allowed = canUploadCrew();
     crewUpload.hidden = !allowed;
     crewUpload.style.display = allowed ? '' : 'none';
@@ -19,7 +37,7 @@
     if (!allowed) crewUpload.open = false;
     crewUpload.querySelectorAll('input,select,textarea,button').forEach(control => control.disabled = !allowed);
   }
-  document.addEventListener('gw-permissions-changed', updateCrewPermission);
+  document.addEventListener('gw-permissions-changed', () => { updateCrewPermission(); loadGalleries(); });
   updateCrewPermission();
   async function request(path, options = {}) {
     const response = await fetch(API + path, {...options, headers: {apikey: KEY, ...options.headers}});
@@ -47,7 +65,20 @@
     const name = document.createElement('h3'); name.textContent = person?.name || photo.author; body.append(name);
     const detail = document.createElement('p'); detail.textContent = person ? person.role : new Date(photo.created_at).toLocaleDateString(); body.append(detail);
     if (photo?.caption) {const caption = document.createElement('p'); caption.className='gallery-caption'; caption.textContent=photo.caption; body.append(caption);}
+    if (photo && photo.gallery === 'crew' && isOwner()) {
+      const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'btn small'; rm.textContent = 'Remove photo';
+      rm.addEventListener('click', () => removePhoto(photo)); body.append(rm);
+    }
     card.append(media,body); return card;
+  }
+  async function removePhoto(photo) {
+    if (!confirm('Remove this crew photo for everyone? This cannot be undone.')) return;
+    const pin = getPin('Enter your Owner code to remove this photo:'); if (!pin) return;
+    try {
+      const res = await request('/rest/v1/rpc/gw_gallery_remove', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({p_pin: pin, p_id: photo.id})});
+      if (res && res.ok === false) { window.gwPin = null; throw new Error(res.msg || 'Not allowed.'); }
+      await loadGalleries();
+    } catch (error) { alert('Could not remove the photo. ' + error.message); }
   }
   function openPhoto(photo) {
     $('galleryFullImage').src=imageUrl(photo.object_path); $('galleryFullImage').alt=photo.caption || photo.author;
@@ -55,7 +86,7 @@
     $('galleryLightbox').showModal();
   }
   async function loadGalleries() {
-    if (busy) return; busy=true;
+    if (busy) { again = true; return; } busy=true;
     $('galleryLoadStatus').textContent='Loading shared photos…';
     try {
       const crewIds=STATE.roster.map(p=>p.id);
@@ -69,7 +100,7 @@
       $('loadMorePhotos').hidden=community.length<=communityLimit;
       $('galleryLoadStatus').textContent='Photos are shared with everyone. Updated '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'.';
     } catch (error) { $('galleryLoadStatus').textContent='Could not load shared photos. '+error.message; }
-    finally {busy=false;}
+    finally {busy=false; if (again) { again=false; loadGalleries(); }}
   }
   async function compress(file) {
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error('Choose a JPG, PNG, or WebP image.');
@@ -96,23 +127,32 @@
     });
     form.addEventListener('submit',async event=>{
       event.preventDefault();const button=form.querySelector('button[type=submit]');if(button.disabled)return;
-      if(kind==='crew' && !canUploadCrew()){status.textContent='Only the Owner can add crew photos.';return;}
+      if(kind==='crew' && !canUploadCrew()){status.textContent='Please sign in to add a crew photo.';return;}
       const file=fileInput.files[0];if(!file){status.textContent='Choose a picture first.';return;}
       const person=kind==='crew'?STATE.roster.find(p=>p.id===$('crewPhotoMember').value):null;
       const author=person?person.name:$('communityPhotoName').value.trim();
       if(!author || (kind==='crew'&&!person)){status.textContent='Please select a crew member or enter your name.';return;}
+      if(kind==='crew' && !isTop() && person.id!==signedIn.id){status.textContent='You can only add your own crew photo.';return;}
       button.disabled=true;status.textContent='Preparing your photo…';
       try {
         if(!pending){
           const blob=await compress(file), id=crypto.randomUUID(), path=kind+'/'+id+'.jpg';
-          if(kind==='crew' && !canUploadCrew()) throw new Error('Owner permission is required.');
+          if(kind==='crew' && !canUploadCrew()) throw new Error('Please sign in first.');
           status.textContent='Uploading photo…';
           await request('/storage/v1/object/gw-gallery/'+path,{method:'POST',headers:{'Content-Type':'image/jpeg','x-upsert':'false'},body:blob});
           pending={id,object_path:path};
         }
         status.textContent='Adding to the gallery…';
-        if(kind==='crew' && !canUploadCrew()) throw new Error('Owner permission is required.');
-        await request('/rest/v1/gallery_photos',{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({...pending,gallery:kind,author,crew_id:person?.id||null,caption:$(kind+'PhotoCaption').value.trim()})});
+        if(kind==='crew' && !canUploadCrew()) throw new Error('Please sign in first.');
+        const caption=$(kind+'PhotoCaption').value.trim();
+        if(kind==='crew'){
+          const pin=getPin('Enter your staff code to publish your crew photo:');
+          if(!pin) throw new Error('Your staff code is needed.');
+          const res=await request('/rest/v1/rpc/gw_crew_photo_add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({p_pin:pin,p_id:pending.id,p_object_path:pending.object_path,p_caption:caption,p_crew_id:person.id})});
+          if(res&&res.ok===false){window.gwPin=null;throw new Error(res.msg||'Not allowed.');}
+        } else {
+          await request('/rest/v1/gallery_photos',{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({...pending,gallery:kind,author,crew_id:null,caption})});
+        }
         pending=null;form.reset();preview.hidden=true;preview.removeAttribute('src');
         if(previews.has(kind)){URL.revokeObjectURL(previews.get(kind));previews.delete(kind);}
         status.textContent='Your photo is live! Everyone can see it in the gallery.';
@@ -121,7 +161,6 @@
       finally{button.disabled=kind==='crew' && !canUploadCrew();}
     });
   }
-  STATE.roster.forEach(person=>{const option=document.createElement('option');option.value=person.id;option.textContent=person.name+' · '+person.role;$('crewPhotoMember').append(option);});
   $('crewGalleryGrid').replaceChildren(...STATE.roster.map(person=>photoCard(null,person)));
   bindUpload('crew');bindUpload('community');
   $('refreshPhotos').addEventListener('click',loadGalleries);
