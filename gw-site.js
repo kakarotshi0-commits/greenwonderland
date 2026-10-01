@@ -105,9 +105,62 @@
   function sync() {
     card.hidden = !canManage();
     if (!card.hidden) buildAdmin();
+    addMoveButtons();
   }
   document.addEventListener('gw-permissions-changed', sync);
   setInterval(sync, 1500);
+
+  /* --- owner: change the order items show on the menu (customers, Customer Favourites and every category follow this order) --- */
+  var TOP = ['owner', 'admin', 'administrator'];   // the roles that can publish the menu
+  function canReorder() {
+    var r = typeof signedIn !== 'undefined' && signedIn ? low(signedIn.role) : '';
+    return TOP.indexOf(r) > -1;
+  }
+  function move(i, dir) {
+    var m = STATE.menu, j = i + dir;
+    if (j < 0 || j >= m.length) return;
+    var t = m[i]; m[i] = m[j]; m[j] = t;
+    renderMenuAdmin();
+    var again = document.querySelector('#menuRows .rrow[data-i="' + j + '"] .gw-move button[data-dir="' + dir + '"]');
+    if (again && !again.disabled) again.focus();
+    var msg = document.getElementById('menuMsg');
+    if (msg) msg.textContent = 'Order changed. Press Save menu to publish it.';
+  }
+  function addMoveButtons() {
+    var rows = document.getElementById('menuRows');
+    if (!rows || typeof STATE === 'undefined' || !STATE.menu) return;
+    var hint = document.getElementById('gwMoveHint');
+    if (!canReorder()) {
+      if (hint) hint.remove();
+      rows.querySelectorAll('.gw-move').forEach(function (b) { b.remove(); });
+      return;
+    }
+    if (!hint) {
+      hint = document.createElement('p'); hint.id = 'gwMoveHint'; hint.className = 'sub';
+      hint.textContent = 'Use the \u25B2 \u25BC buttons to change the order customers see, then press Save menu.';
+      rows.parentNode.insertBefore(hint, rows);
+    }
+    rows.querySelectorAll('.rrow').forEach(function (row) {
+      if (row.querySelector('.gw-move')) return;
+      var i = +row.dataset.i, box = document.createElement('div');
+      box.className = 'gw-move'; box.style.cssText = 'display:flex;gap:4px;flex:0 0 auto';
+      [['\u25B2', -1, 'Move up'], ['\u25BC', 1, 'Move down']].forEach(function (d) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'btn small'; b.textContent = d[0]; b.dataset.dir = d[1];
+        b.title = d[2]; b.setAttribute('aria-label', d[2] + ': ' + (STATE.menu[i] ? STATE.menu[i].name : ''));
+        b.style.padding = '4px 9px';
+        b.disabled = i + d[1] < 0 || i + d[1] >= STATE.menu.length;
+        if (b.disabled) b.style.opacity = '.35';
+        b.addEventListener('click', function () { move(i, d[1]); });
+        box.appendChild(b);
+      });
+      row.insertBefore(box, row.firstChild);
+    });
+  }
+  if (typeof renderMenuAdmin === 'function') {
+    var origAdmin = renderMenuAdmin;
+    window.renderMenuAdmin = function () { var out = origAdmin.apply(this, arguments); addMoveButtons(); return out; };
+  }
 
   apply();
   rpc('gw_get_favourites').then(function (items) {
