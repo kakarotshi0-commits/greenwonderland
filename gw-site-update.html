@@ -1,0 +1,156 @@
+<!-- ===== Green Wonderland: light theme, tidier layout, Customer Favourites first, remove photos =====
+     Paste this whole block into index.html just above  </body>  (after the reward-wheel lines). -->
+<style>
+/* ---- Light theme ---- */
+:root[data-theme="light"]{--lime:#2f7d1f;--lime-dim:#9cc482;--bg:#f4f8ee;--panel:#fff;--panel2:#eaf2df;--text:#14210f;--muted:#4f6a40;--line:rgba(30,70,15,.16)}
+:root[data-theme="light"] header{background:rgba(244,248,238,.92)}
+:root[data-theme="light"] .btn.solid{color:#fff}
+:root[data-theme="light"] .card{background:#fff;border-color:var(--line);box-shadow:0 1px 4px rgba(20,40,10,.08)}
+:root[data-theme="light"] .card:hover{background:#fff;border-color:var(--lime);box-shadow:0 8px 22px rgba(20,40,10,.12)}
+:root[data-theme="light"] .card .cat{color:var(--muted)}
+:root[data-theme="light"] .card .price{border-color:var(--line)}
+:root[data-theme="light"] .chip.active{background:rgba(47,125,31,.1)}
+:root[data-theme="light"] .product-media.illustrated{background:radial-gradient(ellipse at 50% 35%,#d7dfbd,#aebe91 75%);border:0}
+:root[data-theme="light"] .illustrated .icon{color:#3f5a2b;filter:none}
+:root[data-theme="light"] .illustrated span{color:#4d6638}
+/* ---- Tidier page: even spacing, clear bands, filter bar in a card ---- */
+section{padding:48px 0}
+.hero{padding:36px 0 30px;background:linear-gradient(180deg,var(--panel2),var(--bg))}
+.section-head{border-bottom:2px solid var(--line);padding-bottom:12px}
+.section-head h2,.gallery-heading h2{font-size:1.9rem}
+.tools{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.photo-section{background:var(--panel2)}
+#about{background:var(--bg)}
+#staff,#admin{background:var(--panel2);border-top:1px solid var(--line)}
+/* ---- Remove-photo button (owners and managers only) ---- */
+.gw-card{position:relative}
+.gw-remove{position:absolute;top:8px;right:8px;z-index:5;background:#b3261e;color:#fff;border:0;border-radius:8px;padding:6px 10px;font:600 .75rem system-ui,sans-serif;cursor:pointer}
+#gwFav label{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+</style>
+<script>
+(function () {
+  var SB_URL = 'https://wtiefpuczygmyjaampdg.supabase.co';
+  var SB_KEY = 'sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif';
+  var pin = null;
+
+  document.documentElement.setAttribute('data-theme', 'light');
+  var staff = document.getElementById('staff'), about = document.getElementById('about');
+  if (staff && about) staff.before(about);                       // public content first, staff area last
+
+  function rpc(fn, args) {
+    var h = { apikey: SB_KEY, 'Content-Type': 'application/json' };
+    if (/^eyJ/.test(SB_KEY)) h.Authorization = 'Bearer ' + SB_KEY;
+    return fetch(SB_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers: h, body: JSON.stringify(args || {}) })
+      .then(function (r) { return r.json().catch(function () { return null; }).then(function (j) {
+        if (!r.ok) throw new Error((j && j.message) || 'Request failed'); return j; }); });
+  }
+  function load(k) { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch (e) { return []; } }
+  function canMark() {
+    return !!signedIn && (['owner', 'admin', 'administrator', 'manager'].indexOf(String(signedIn.role).toLowerCase()) > -1 ||
+      !!getPerms(signedIn.role).menu);
+  }
+  function askPin() { if (!pin) pin = window.prompt('Admin passphrase:'); return pin; }
+
+  function start() {
+    var fav = new Set(load('gw_fav').map(String)), hidden = new Set(load('gw_hidden')), favOn = fav.size > 0, touched = false;
+    var origRender = window.renderMenu;
+
+    /* ---- Menu opens on Customer Favourites ---- */
+    window.renderMenu = function () {
+      if (favOn) activeCat = 'All';
+      origRender();
+      var chips = document.getElementById('categoryFilters');
+      if (!chips) return;
+      if (fav.size) {
+        var b = document.createElement('button');
+        b.className = 'chip' + (favOn ? ' active' : ''); b.textContent = '\u2605 Customer favourites';
+        b.onclick = function () { favOn = true; touched = true; window.renderMenu(); };
+        chips.insertBefore(b, chips.firstChild);
+      }
+      if (!favOn) return;
+      chips.querySelectorAll('.chip[data-cat]').forEach(function (c) { c.classList.remove('active'); });
+      var q = document.getElementById('search').value.trim().toLowerCase();
+      var items = STATE.menu.filter(function (it) { return fav.has(String(it.id)) && (!q || it.name.toLowerCase().indexOf(q) > -1); });
+      document.getElementById('grid').innerHTML = items.map(function (it) {
+        return '<div class="card">' + (it.photo ? '<div class="product-media"><img class="photo" src="' + escapeHtml(it.photo) + '" alt="' + escapeHtml(it.name) + '" loading="lazy"></div>'
+          : '<div class="product-media illustrated"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[it.category] || '') + '</svg><span>' + escapeHtml(it.category) + '</span></div>') +
+          '<h3>' + escapeHtml(it.name) + '</h3><div class="cat">' + escapeHtml(it.category) + '</div>' +
+          (it.description ? '<p class="product-description">' + escapeHtml(it.description) + '</p>' : '') +
+          '<div class="price">$' + Number(it.price).toFixed(2) + '</div></div>';
+      }).join('');
+      document.getElementById('count').textContent = items.length + ' favourite' + (items.length === 1 ? '' : 's');
+      document.getElementById('empty').style.display = items.length ? 'none' : 'block';
+    };
+    document.getElementById('categoryFilters').addEventListener('click', function (e) {
+      if (e.target.closest('.chip[data-cat]')) { favOn = false; touched = true; }
+    }, true);
+    window.renderMenu();
+
+    /* ---- Owner / manager panel: pick favourites, restore removed photos ---- */
+    var panel = document.createElement('div');
+    panel.className = 'card2'; panel.id = 'gwFav'; panel.hidden = true;
+    var adminWrap = document.querySelector('#admin .wrap');
+    if (adminWrap) adminWrap.insertBefore(panel, adminWrap.children[1] || null);
+    function drawPanel() {
+      panel.hidden = !canMark();
+      if (panel.hidden) return;
+      panel.innerHTML = '<h3 style="font-size:1.1rem">Customer favourites</h3><p class="sub">Tick the items customers see first when they open the website. Saving needs the admin passphrase.</p>' +
+        STATE.menu.map(function (it) { return '<label><input type="checkbox" data-id="' + escapeHtml(String(it.id)) + '"' + (fav.has(String(it.id)) ? ' checked' : '') + '> ' + escapeHtml(it.name) + '</label>'; }).join('') +
+        '<div class="row"><button class="btn solid small" id="gwFavSave">Save favourites</button><button class="btn small" id="gwRestore">Restore removed photos</button></div><p class="msg" id="gwFavMsg"></p>';
+      var msg = panel.querySelector('#gwFavMsg');
+      panel.querySelector('#gwFavSave').onclick = function () {
+        var ids = [].map.call(panel.querySelectorAll('input[data-id]:checked'), function (c) { return c.dataset.id; });
+        if (!askPin()) return;
+        rpc('gw_set_favourites', { p_pin: pin, p_ids: ids }).then(function () {
+          fav = new Set(ids); localStorage.setItem('gw_fav', JSON.stringify(ids)); msg.textContent = 'Saved. Customers now see these first.'; window.renderMenu();
+        }).catch(function (e) { pin = null; msg.textContent = e.message; });
+      };
+      panel.querySelector('#gwRestore').onclick = function () {
+        if (!askPin()) return;
+        rpc('gw_restore_photos', { p_pin: pin }).then(function () { hidden = new Set(); localStorage.setItem('gw_hidden', '[]'); msg.textContent = 'Removed photos are back.'; photos(); })
+          .catch(function (e) { pin = null; msg.textContent = e.message; });
+      };
+    }
+    document.addEventListener('gw-permissions-changed', function () { setTimeout(function () { drawPanel(); photos(); }, 0); });
+
+    /* ---- Remove crew / community photos (owners and managers) ---- */
+    function keyOf(img) { return (img.currentSrc || img.src || '').split('#')[0].split('?')[0]; }
+    function photos() {
+      document.querySelectorAll('#crewGalleryGrid img, #communityGalleryGrid img').forEach(function (img) {
+        var card = img.closest('#crewGalleryGrid > *, #communityGalleryGrid > *') || img.parentElement, key = keyOf(img);
+        if (!key || key.indexOf('data:') === 0 && key.length > 600) return;
+        card.style.display = hidden.has(key) ? 'none' : '';
+        card.classList.add('gw-card');
+        var btn = card.querySelector('.gw-remove');
+        if (canMark() && !hidden.has(key)) {
+          if (!btn) {
+            btn = document.createElement('button'); btn.className = 'gw-remove'; btn.textContent = 'Remove photo'; btn.type = 'button';
+            btn.onclick = function (e) {
+              e.preventDefault(); e.stopPropagation();
+              if (!window.confirm('Remove this photo from the website?') || !askPin()) return;
+              rpc('gw_hide_photo', { p_pin: pin, p_key: key }).then(function () {
+                hidden.add(key); localStorage.setItem('gw_hidden', JSON.stringify([...hidden])); photos();
+              }).catch(function (er) { pin = null; window.alert(er.message); });
+            };
+            card.appendChild(btn);
+          }
+        } else if (btn) btn.remove();
+      });
+    }
+    ['crewGalleryGrid', 'communityGalleryGrid'].forEach(function (id) {
+      var g = document.getElementById(id); if (g) new MutationObserver(photos).observe(g, { childList: true, subtree: true });
+    });
+    photos(); drawPanel();
+
+    /* ---- Latest favourites + removed photos from the server ---- */
+    rpc('gw_get_site').then(function (s) {
+      fav = new Set((s.favourites || []).map(String)); hidden = new Set(s.hidden || []);
+      localStorage.setItem('gw_fav', JSON.stringify([...fav])); localStorage.setItem('gw_hidden', JSON.stringify([...hidden]));
+      if (!touched) favOn = fav.size > 0;
+      window.renderMenu(); drawPanel(); photos();
+    }).catch(function () { /* offline or not set up yet: keep what is cached */ });
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive' && window.__gwDeferredDone) start();
+  else document.addEventListener('DOMContentLoaded', start);
+})();
+</script>
