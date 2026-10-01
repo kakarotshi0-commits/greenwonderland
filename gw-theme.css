@@ -1,6 +1,6 @@
-html:root{color-scheme:dark;--bg:#030704;--panel:#0a120b;--panel2:#111c12;--text:#e9f2e1;--muted:#8aa575;--lime:#96d62a;--lime-dim:#3f6b16;--line:rgba(150,220,90,.14)}
-body{background:radial-gradient(ellipse 900px 480px at 85% -10%,rgba(150,214,42,.09),transparent 60%),#030704}
-header{background:rgba(3,7,4,.92)}
+html:root{color-scheme:light;--bg:#f4f8ee;--panel:#fff;--panel2:#eaf2df;--text:#14210f;--muted:#4f6a40;--lime:#2f7d1f;--lime-dim:#9cc482;--line:rgba(30,70,15,.16)}
+body{background:radial-gradient(ellipse 900px 480px at 85% -10%,rgba(47,125,31,.10),transparent 60%),#f4f8ee}
+header{background:rgba(244,248,238,.92)}
 section{padding:56px 0;border-top:1px solid var(--line)}
 .hero{border-top:0}
 .section-head{border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:22px}
@@ -23,9 +23,33 @@ input:not([type=checkbox]):not([type=color]):not([type=file]),select,textarea{ba
 .illustrated span{color:#4d6638}
 .gw-favlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin:12px 0}
 .gw-favlist label{display:flex;gap:8px;align-items:center}
-.gwrw-modal{background:#0a120b!important;color:var(--text)!important}
+.gwrw-modal{background:#fff!important;color:var(--text)!important}
 .gwrw-head,.gwrw-table th,.gwrw-table td,.gwrw-claim:not(:empty){border-color:var(--line)!important}
 .gwrw-x,.gwrw-label{color:var(--text)!important}
 .gwrw-hint,.gwrw-cols{color:var(--muted)!important}
 .gwrw-input,.gwrw-code{background:var(--panel2)!important;color:var(--text)!important;border-color:var(--line)!important}
 .gwrw-btn,.gwrw-fab-alt{background:var(--panel2)!important;color:var(--lime)!important}
+
+/* ---- Light theme: cards, buttons and hero (the base stylesheet hard-codes dark colours for these) ---- */
+.hero{background:linear-gradient(180deg,var(--panel2),var(--bg))}
+.card{background:#fff;border:1px solid var(--line);box-shadow:0 1px 4px rgba(20,40,10,.08)}
+.card:hover{background:#fff;border-color:var(--lime);box-shadow:0 8px 22px rgba(20,40,10,.14)}
+.card .cat{color:var(--muted)}
+.card .price{border-color:var(--line)}
+.chip.active{background:rgba(47,125,31,.1)}
+.btn.solid{color:#fff}
+.btn.solid:hover{box-shadow:0 6px 18px rgba(47,125,31,.35)}
+.crest img{filter:saturate(.78) contrast(1.08) drop-shadow(0 8px 18px rgba(20,40,10,.25))}
+
+/* ---- Light theme: gallery tiles and animation details that were tuned for dark ---- */
+.gallery-photo-media{background:radial-gradient(circle at 50% 30%,#d7dfbd,#aebe91 80%)}
+.gallery-initials{color:#3f5a2b;border-color:#6f8c52}
+.gallery-lightbox::backdrop{background:rgba(20,33,15,.6)}
+@media (prefers-reduced-motion: no-preference){
+  header.gw-scrolled{box-shadow:0 8px 24px rgba(20,40,10,.12)}
+  .gallery-photo:hover{box-shadow:0 14px 32px rgba(20,40,10,.18)}
+  /* the title shine used a near-white highlight, which would vanish on a light page */
+  @supports (-webkit-background-clip: text) or (background-clip: text){
+    .hero h1 span{background:linear-gradient(105deg,var(--lime) 0 42%,#7cc544 50%,var(--lime) 58% 100%) 100% 0 / 250% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  }
+}
