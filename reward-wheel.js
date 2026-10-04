@@ -196,12 +196,21 @@
       if (th.neon) { ctx.shadowColor = th.stroke; ctx.shadowBlur = 10; }
       ctx.stroke(); ctx.shadowBlur = 0;
       if (fx.win === idx) { ctx.fillStyle = 'rgba(255,255,255,' + (.3 + .3 * Math.sin(t / 160)) + ')'; ctx.fill(); }
-      if (span > 0.3) {
+      if (fx.inspect === idx) { ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill(); }
+      {
         ctx.save(); ctx.translate(c, c); ctx.rotate(a + span / 2); ctx.textAlign = 'right';
         ctx.font = '800 ' + Math.round(s / 22) + 'px ' + th.font;
-        var lb = p.label.length > 14 ? p.label.slice(0, 13) + '\u2026' : p.label;
-        ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = th.shade; ctx.strokeText(lb, r - 16, 7);
-        ctx.fillStyle = th.label; ctx.fillText(lb, r - 16, 7); ctx.restore();
+        var lb = String(p.label), metrics = ctx.measureText(lb), edge = r - 16;
+        var height = Math.max(Math.round(s / 22), (metrics.actualBoundingBoxAscent || 0) + (metrics.actualBoundingBoxDescent || 0));
+        // Keep the entire label (including its outline) inside the wedge and outside the hub.
+        var left = edge - metrics.width - 4, halfHeight = height / 2 + 4;
+        var fits = left > s / 13 + 6 && Math.atan2(halfHeight, left) < span / 2 - .025
+          && Math.hypot(edge + 4, halfHeight) < r - 4;
+        if (fits) {
+          ctx.textBaseline = 'middle'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = th.shade; ctx.strokeText(lb, edge, 0);
+          ctx.fillStyle = th.label; ctx.fillText(lb, edge, 0);
+        }
+        ctx.restore();
       }
       a += span;
     });
@@ -218,7 +227,7 @@
   }
   function startLoop(cv, st) {
     (function f(t) {
-      if (st.pz) drawWheel(cv, st.pz, st.rot, { t: t, win: st.win, theme: st.theme });
+      if (st.pz) drawWheel(cv, st.pz, st.rot, { t: t, win: st.win, inspect: st.inspect, theme: st.theme });
       if (st.step) st.step(t);
       raf = requestAnimationFrame(f);
     })(performance.now());
@@ -242,12 +251,42 @@
 
   /* ---------- spin screen ---------- */
   function openSpin() {
-    var cv = h('canvas', { class: 'gwrw-canvas', width: 520, height: 520, 'aria-label': 'Reward wheel' });
+    var cv = h('canvas', { class: 'gwrw-canvas', width: 520, height: 520, tabindex: '0', role: 'group',
+      'aria-label': 'Reward wheel. Use arrow keys to explore rewards, or hover or tap a segment.', 'aria-describedby': 'gwrw-reward-detail' });
     var input = h('input', { class: 'gwrw-input', placeholder: 'GW-XXXX-XXXX', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Wheel code' });
     var msg = h('p', { class: 'gwrw-msg', 'aria-live': 'polite' });
     var go = h('button', { class: 'gwrw-primary' }, 'Spin');
     var busy = false, finished = false, usedCode = '', multi = false;
     var st = { rot: 0, win: -1, pz: null, step: null, theme: 'classic' }, pointer = h('div', { class: 'gwrw-pointer' });
+    var detail = h('p', { id: 'gwrw-reward-detail', class: 'gwrw-reward-detail', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
+    var pinned = -1, hovered = -1;
+    function inspectReward() {
+      st.inspect = hovered >= 0 ? hovered : pinned;
+      detail.textContent = st.pz && st.inspect >= 0 ? 'Reward: ' + st.pz[st.inspect].label : 'Hover or tap a segment to read its full reward. Arrow keys also work.';
+    }
+    function resetInspection() { pinned = hovered = -1; inspectReward(); }
+    function segmentAt(event) {
+      if (!st.pz || (busy && !finished)) return -1;
+      var box = cv.getBoundingClientRect(), x = (event.clientX - box.left) * cv.width / box.width - cv.width / 2;
+      var y = (event.clientY - box.top) * cv.height / box.height - cv.height / 2, distance = Math.hypot(x, y);
+      if (distance < cv.width / 13 + 6 || distance > cv.width / 2 - 26) return -1;
+      return indexAt(st.pz, ((Math.atan2(y, x) + Math.PI / 2 - st.rot) % TAU + TAU) % TAU);
+    }
+    cv.addEventListener('pointermove', function (event) { if (event.pointerType === 'touch') return; hovered = segmentAt(event); inspectReward(); });
+    cv.addEventListener('pointerleave', function () { hovered = -1; inspectReward(); });
+    cv.addEventListener('click', function (event) { var index = segmentAt(event); pinned = index === pinned ? -1 : index; hovered = -1; inspectReward(); });
+    cv.addEventListener('keydown', function (event) {
+      if (!st.pz || (busy && !finished)) return;
+      var index = st.inspect >= 0 ? st.inspect : -1;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') pinned = (index + 1) % st.pz.length;
+      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') pinned = index < 0 ? st.pz.length - 1 : (index - 1 + st.pz.length) % st.pz.length;
+      else if (event.key === 'Home') pinned = 0;
+      else if (event.key === 'End') pinned = st.pz.length - 1;
+      else if (event.key === 'Enter' || event.key === ' ') pinned = pinned < 0 ? 0 : -1;
+      else return;
+      event.preventDefault(); hovered = -1; inspectReward();
+    });
+    resetInspection();
     var wname = h('div', { class: 'gwrw-wname', 'aria-live': 'polite' });
     var mute = h('button', { class: 'gwrw-mute', type: 'button', onclick: function () { sound = !sound; mute.textContent = 'Sound: ' + (sound ? 'on' : 'off'); } }, 'Sound: on');
     function tick() { pointer.classList.remove('gwrw-tick'); void pointer.offsetWidth; pointer.classList.add('gwrw-tick'); tickSnd(); }
@@ -263,7 +302,7 @@
       var w = ws[0], pz = shown(w.prizes);
       multi = ws.length > 1;
       if (pz.length >= 2) {
-        st.pz = pz; st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
+        st.pz = pz; resetInspection(); st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
         wname.textContent = multi ? 'Enter your code to unlock your wheel' : '';
       } else { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'The wheel is not set up yet. Ask the owner to add rewards.'; }
     }).catch(function (e) { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'Could not load the wheel: ' + e.message; });
@@ -302,6 +341,7 @@
       if (finished) return closeModal();
       if (busy) return;
       busy = true; go.disabled = true; msg.className = 'gwrw-msg'; msg.textContent = 'Checking code\u2026';
+      resetInspection();
       rpc('rw_redeem', { p_code: input.value }).then(function (res) {
         if (!res.ok) return fail(res.msg);
         var w = res.wheel || { id: 1, name: 'Classic', theme: 'classic' }, pz = shown(res.prizes);
@@ -324,7 +364,7 @@
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') run(); });
     openModal('Spin the wheel', h('div', { class: 'gwrw-body' },
       wname,
-      h('div', { class: 'gwrw-wheelbox' }, pointer, cv),
+      h('div', { class: 'gwrw-wheelbox' }, pointer, cv), detail,
       h('div', { class: 'gwrw-row' }, input, go), mute, msg, claimBox));
     overlay.firstChild.classList.add('gwrw-fun'); applyTheme(st.theme); startLoop(cv, st);
   }
@@ -505,6 +545,8 @@
       '.gwrw-narrow{width:92px}',
       '.gwrw-wheelbox{position:relative;max-width:340px;margin:0 auto}',
       '.gwrw-canvas{width:100%;height:auto;display:block}',
+      '.gwrw-canvas{cursor:pointer;touch-action:manipulation}.gwrw-canvas:focus-visible{outline:3px solid #ffd23f;outline-offset:4px;border-radius:50%}',
+      '.gwrw-reward-detail{min-height:3em;margin:12px 0 0;padding:10px 12px;border:1px solid currentColor;border-radius:10px;text-align:center;font-size:14px;line-height:1.5;overflow-wrap:anywhere;white-space:normal}',
       '.gwrw-pointer{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:26px solid #12261b;z-index:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.3))}',
       '.gwrw-msg{min-height:1.5em;margin:12px 0 0;font-weight:600}.gwrw-err{color:#b3261e}.gwrw-win{color:#1a7a43}',
       '.gwrw-wheelbox ~ .gwrw-msg.gwrw-win{font-size:18px}',
