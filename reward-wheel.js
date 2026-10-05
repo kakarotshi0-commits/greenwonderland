@@ -200,18 +200,27 @@
       {
         ctx.save(); ctx.translate(c, c); ctx.rotate(a + span / 2); ctx.textAlign = 'right';
         var lb = String(p.label), edge = r - 16, fits = false, minFont = Math.round(s / 30);
-        // Try readable smaller type, then a number matching the complete reward list.
-        for (var attempt = 0; attempt < 2 && !fits; attempt++) {
-          if (attempt) lb = String(idx + 1);
-          for (var fontSize = Math.round(s / 22); fontSize >= minFont; fontSize -= 2) {
-            ctx.font = '800 ' + fontSize + 'px ' + th.font;
-            var metrics = ctx.measureText(lb);
-            var height = Math.max(fontSize, (metrics.actualBoundingBoxAscent || 0) + (metrics.actualBoundingBoxDescent || 0));
-            var left = edge - metrics.width - 4, halfHeight = height / 2 + 4;
-            fits = left > s / 13 + 6 && Math.atan2(halfHeight, left) < span / 2 - .025
-              && Math.hypot(edge + 4, halfHeight) < r - 4;
-            if (fits) break;
+        var labelFits = function (text, size) {
+          ctx.font = '800 ' + size + 'px ' + th.font;
+          var metrics = ctx.measureText(text);
+          var height = Math.max(size, (metrics.actualBoundingBoxAscent || 0) + (metrics.actualBoundingBoxDescent || 0));
+          var left = edge - metrics.width - 4, halfHeight = height / 2 + 4;
+          return left > s / 13 + 6 && Math.atan2(halfHeight, left) < span / 2 - .025
+            && Math.hypot(edge + 4, halfHeight) < r - 4;
+        };
+        // Keep full names when possible; otherwise show the longest fitting prefix plus dots.
+        for (var fontSize = Math.round(s / 22); fontSize >= minFont; fontSize -= 2) {
+          fits = labelFits(lb, fontSize);
+          if (fits) break;
+        }
+        if (!fits) {
+          var letters = Array.from(lb), low = 1, high = letters.length - 1, best = '';
+          while (low <= high) {
+            var mid = Math.floor((low + high) / 2), candidate = letters.slice(0, mid).join('').trimEnd() + '...';
+            if (labelFits(candidate, minFont)) { best = candidate; low = mid + 1; }
+            else high = mid - 1;
           }
+          if (best) { lb = best; fits = true; }
         }
         if (fits) {
           ctx.textBaseline = 'middle'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = th.shade; ctx.strokeText(lb, edge, 0);
@@ -279,7 +288,7 @@
         var button = h('button', { type: 'button', class: 'gwrw-reward-option', 'aria-pressed': 'false', onclick: function () {
           if (busy && !finished) return;
           pinned = pinned === index ? -1 : index; hovered = -1; inspectReward();
-        } }, h('span', { class: 'gwrw-reward-number', style: 'background:' + safe(prize.color), 'aria-hidden': 'true' }, index + 1),
+        } }, h('span', { class: 'gwrw-reward-swatch', style: 'background:' + safe(prize.color), 'aria-hidden': 'true' }),
           h('span', null, prize.label));
         rewardButtons.push(button); rewardList.appendChild(button);
       });
@@ -570,7 +579,7 @@
       '.gwrw-canvas{cursor:pointer;touch-action:manipulation}.gwrw-canvas:focus-visible{outline:3px solid #ffd23f;outline-offset:4px;border-radius:50%}',
       '.gwrw-reward-detail{min-height:3em;margin:12px 0 0;padding:10px 12px;border:1px solid currentColor;border-radius:10px;text-align:center;font-size:14px;line-height:1.5;overflow-wrap:anywhere;white-space:normal}',
       '.gwrw-reward-list{display:grid;gap:8px}.gwrw-reward-option{display:flex;align-items:center;gap:10px;width:100%;min-width:0;padding:10px 12px;text-align:left;background:rgba(255,255,255,.08);color:inherit;border:1px solid currentColor;border-radius:10px;font:inherit;cursor:pointer;white-space:normal;overflow-wrap:anywhere}',
-      '.gwrw-reward-option[aria-pressed=true]{outline:3px solid #e8a317;outline-offset:1px;background:rgba(232,163,23,.18)}.gwrw-reward-option:focus-visible{outline:3px solid #e8a317;outline-offset:2px}.gwrw-reward-number{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:50%;color:#fff;font-weight:800;text-shadow:0 1px 3px #000}',
+      '.gwrw-reward-option[aria-pressed=true]{outline:3px solid #e8a317;outline-offset:1px;background:rgba(232,163,23,.18)}.gwrw-reward-option:focus-visible{outline:3px solid #e8a317;outline-offset:2px}.gwrw-reward-swatch{flex:0 0 16px;height:16px;border-radius:50%;border:1px solid rgba(255,255,255,.6)}',
       '.gwrw-pointer{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:26px solid #12261b;z-index:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.3))}',
       '.gwrw-msg{min-height:1.5em;margin:12px 0 0;font-weight:600}.gwrw-err{color:#b3261e}.gwrw-win{color:#1a7a43}',
       '.gwrw-wheelbox ~ .gwrw-msg.gwrw-win{font-size:18px}',
