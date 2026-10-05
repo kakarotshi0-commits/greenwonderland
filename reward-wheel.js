@@ -199,13 +199,20 @@
       if (fx.inspect === idx) { ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fill(); }
       {
         ctx.save(); ctx.translate(c, c); ctx.rotate(a + span / 2); ctx.textAlign = 'right';
-        ctx.font = '800 ' + Math.round(s / 22) + 'px ' + th.font;
-        var lb = String(p.label), metrics = ctx.measureText(lb), edge = r - 16;
-        var height = Math.max(Math.round(s / 22), (metrics.actualBoundingBoxAscent || 0) + (metrics.actualBoundingBoxDescent || 0));
-        // Keep the entire label (including its outline) inside the wedge and outside the hub.
-        var left = edge - metrics.width - 4, halfHeight = height / 2 + 4;
-        var fits = left > s / 13 + 6 && Math.atan2(halfHeight, left) < span / 2 - .025
-          && Math.hypot(edge + 4, halfHeight) < r - 4;
+        var lb = String(p.label), edge = r - 16, fits = false, minFont = Math.round(s / 30);
+        // Try readable smaller type, then a number matching the complete reward list.
+        for (var attempt = 0; attempt < 2 && !fits; attempt++) {
+          if (attempt) lb = String(idx + 1);
+          for (var fontSize = Math.round(s / 22); fontSize >= minFont; fontSize -= 2) {
+            ctx.font = '800 ' + fontSize + 'px ' + th.font;
+            var metrics = ctx.measureText(lb);
+            var height = Math.max(fontSize, (metrics.actualBoundingBoxAscent || 0) + (metrics.actualBoundingBoxDescent || 0));
+            var left = edge - metrics.width - 4, halfHeight = height / 2 + 4;
+            fits = left > s / 13 + 6 && Math.atan2(halfHeight, left) < span / 2 - .025
+              && Math.hypot(edge + 4, halfHeight) < r - 4;
+            if (fits) break;
+          }
+        }
         if (fits) {
           ctx.textBaseline = 'middle'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = th.shade; ctx.strokeText(lb, edge, 0);
           ctx.fillStyle = th.label; ctx.fillText(lb, edge, 0);
@@ -259,10 +266,24 @@
     var busy = false, finished = false, usedCode = '', multi = false;
     var st = { rot: 0, win: -1, pz: null, step: null, theme: 'classic' }, pointer = h('div', { class: 'gwrw-pointer' });
     var detail = h('p', { id: 'gwrw-reward-detail', class: 'gwrw-reward-detail', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' });
+    var rewardList = h('div', { class: 'gwrw-reward-list', role: 'group', 'aria-label': 'All rewards' }), rewardButtons = [];
     var pinned = -1, hovered = -1;
     function inspectReward() {
       st.inspect = hovered >= 0 ? hovered : pinned;
       detail.textContent = st.pz && st.inspect >= 0 ? 'Reward: ' + st.pz[st.inspect].label : 'Hover or tap a segment to read its full reward. Arrow keys also work.';
+      rewardButtons.forEach(function (button, index) { button.setAttribute('aria-pressed', String(st.inspect === index)); });
+    }
+    function renderRewards() {
+      rewardList.textContent = ''; rewardButtons = [];
+      (st.pz || []).forEach(function (prize, index) {
+        var button = h('button', { type: 'button', class: 'gwrw-reward-option', 'aria-pressed': 'false', onclick: function () {
+          if (busy && !finished) return;
+          pinned = pinned === index ? -1 : index; hovered = -1; inspectReward();
+        } }, h('span', { class: 'gwrw-reward-number', style: 'background:' + safe(prize.color), 'aria-hidden': 'true' }, index + 1),
+          h('span', null, prize.label));
+        rewardButtons.push(button); rewardList.appendChild(button);
+      });
+      resetInspection();
     }
     function resetInspection() { pinned = hovered = -1; inspectReward(); }
     function segmentAt(event) {
@@ -302,7 +323,7 @@
       var w = ws[0], pz = shown(w.prizes);
       multi = ws.length > 1;
       if (pz.length >= 2) {
-        st.pz = pz; resetInspection(); st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
+        st.pz = pz; renderRewards(); st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
         wname.textContent = multi ? 'Enter your code to unlock your wheel' : '';
       } else { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'The wheel is not set up yet. Ask the owner to add rewards.'; }
     }).catch(function (e) { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'Could not load the wheel: ' + e.message; });
@@ -347,7 +368,7 @@
         var w = res.wheel || { id: 1, name: 'Classic', theme: 'classic' }, pz = shown(res.prizes);
         usedCode = input.value; input.disabled = true;
         st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
-        st.pz = pz; st.rot = 0; st.win = -1; st.step = null;
+        st.pz = pz; renderRewards(); st.rot = 0; st.win = -1; st.step = null;
         wname.textContent = w.name || '';
         msg.textContent = (multi && w.name ? w.name + ' unlocked. ' : '') + 'Spinning\u2026';
         setTimeout(function () {
@@ -365,7 +386,8 @@
     openModal('Spin the wheel', h('div', { class: 'gwrw-body' },
       wname,
       h('div', { class: 'gwrw-wheelbox' }, pointer, cv), detail,
-      h('div', { class: 'gwrw-row' }, input, go), mute, msg, claimBox));
+      h('div', { class: 'gwrw-row' }, input, go), mute, msg,
+      h('h3', null, 'All rewards'), rewardList, claimBox));
     overlay.firstChild.classList.add('gwrw-fun'); applyTheme(st.theme); startLoop(cv, st);
   }
 
@@ -547,6 +569,8 @@
       '.gwrw-canvas{width:100%;height:auto;display:block}',
       '.gwrw-canvas{cursor:pointer;touch-action:manipulation}.gwrw-canvas:focus-visible{outline:3px solid #ffd23f;outline-offset:4px;border-radius:50%}',
       '.gwrw-reward-detail{min-height:3em;margin:12px 0 0;padding:10px 12px;border:1px solid currentColor;border-radius:10px;text-align:center;font-size:14px;line-height:1.5;overflow-wrap:anywhere;white-space:normal}',
+      '.gwrw-reward-list{display:grid;gap:8px}.gwrw-reward-option{display:flex;align-items:center;gap:10px;width:100%;min-width:0;padding:10px 12px;text-align:left;background:rgba(255,255,255,.08);color:inherit;border:1px solid currentColor;border-radius:10px;font:inherit;cursor:pointer;white-space:normal;overflow-wrap:anywhere}',
+      '.gwrw-reward-option[aria-pressed=true]{outline:3px solid #e8a317;outline-offset:1px;background:rgba(232,163,23,.18)}.gwrw-reward-option:focus-visible{outline:3px solid #e8a317;outline-offset:2px}.gwrw-reward-number{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:50%;color:#fff;font-weight:800;text-shadow:0 1px 3px #000}',
       '.gwrw-pointer{position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:26px solid #12261b;z-index:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.3))}',
       '.gwrw-msg{min-height:1.5em;margin:12px 0 0;font-weight:600}.gwrw-err{color:#b3261e}.gwrw-win{color:#1a7a43}',
       '.gwrw-wheelbox ~ .gwrw-msg.gwrw-win{font-size:18px}',
