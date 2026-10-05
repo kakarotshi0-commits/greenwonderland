@@ -68,6 +68,6 @@
  function showCode(d,out){out.hidden=false;const loginText='Green Wonderland daily cards\nCID: '+d.cid+'\nLogin code: '+d.code+'\n'+location.origin+location.pathname+'#daily-cards';const status=el('p',{role:'status'});out.replaceChildren(el('pre',{},loginText),button('Copy customer login',async()=>{try{await navigator.clipboard.writeText(loginText);status.textContent='Copied. Give this privately to the customer.';}catch{status.textContent='Select the details above and copy them.';}}),status);}
  function syncOwner(){owner.hidden=!isOwner();const next=isOwner()?(signedIn.id+'|'+window.gwPin):'';if(next!==ownerKey){ownerKey=next;ownerLoaded=false;ownerBody.replaceChildren();ownerMsg.textContent='';}if(isOwner()&&!ownerLoaded&&!ownerBusy)loadOwner();}
  document.addEventListener('gw-permissions-changed',syncOwner);window.addEventListener('gw-auth-changed',syncOwner);
- render();loadPublic().then(()=>loadStatus());syncOwner();setInterval(tick,1000);
+ render();loadPublic().then(()=>{loadStatus();if(location.hash==='#daily-cards')section.scrollIntoView({block:'start'});});syncOwner();setInterval(tick,1000);
  setInterval(()=>{if(!document.hidden){loadStatus();syncOwner();}},15000);
 })();
