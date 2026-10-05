@@ -112,7 +112,7 @@
     var employee = String(sale.employee || '');
     return rpc('gw_issue_sale_reward', { p_pin: global.gwPin || '', p_sale_id: sale.id != null ? String(sale.id) : null })
       .then(function (r) {
-        if (r && r.ok) { showIssued({ code: r.code, employee: employee, amount: total, wheel: r.wheel, wheelName: r.wheel_name }); return r.code; }
+        if (r && r.ok && r.code) { showIssued({ code: r.code, employee: employee, amount: total, wheel: r.wheel, wheelName: r.wheel_name }); return r.code; }
         return null;
       })
       .catch(function (e) {
