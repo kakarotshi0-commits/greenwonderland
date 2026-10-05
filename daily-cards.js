@@ -23,6 +23,10 @@
   el('div',{class:'dc-access'},el('p',{class:'sub'},'Sign in with your CID and the fixed code chosen by the Owner. Use the same code every day. Your 3 reveals reset at 6 AM Bangladesh time.'),login,signed),msg,grid);
  function setClock(data){resetAt=Date.parse(data.reset_at);serverOffset=Date.parse(data.server_now)-Date.now();tick();}
  function tick(){if(!resetAt){clock.textContent='Reset · 6 AM (Bangladesh)';return;}const secs=Math.max(0,Math.ceil((resetAt-Date.now()-serverOffset)/1000));const hh=String(Math.floor(secs/3600)).padStart(2,'0'),mm=String(Math.floor(secs%3600/60)).padStart(2,'0'),ss=String(secs%60).padStart(2,'0');clock.textContent='Resets in '+hh+':'+mm+':'+ss+' · 6 AM';if(!secs){resetAt=0;if(token){storeToken('');board=null;customer='';render();msg.textContent='A new day has started. Sign in again for your 3 reveals.';}loadPublic();}}
+ const rewardList=el('ul',{class:'dc-public-rewards'}),rewardListMsg=el('p',{class:'sub',role:'status'},'Loading rewards…');
+ const rewardShowcase=el('div',{class:'dc-showcase',id:'dailyDisplayableRewards'},el('span',{class:'dc-eyebrow'},'THE REWARD COLLECTION'),el('h3',{},'Daily rewards'),el('p',{class:'sub'},'Explore the rewards selected for display by the Owner. Your own reward appears after staff marks it done.'),rewardListMsg,rewardList);wrap.append(rewardShowcase);
+ let rewardListKey='',publicLoading=false;
+ function renderPublicRewards(rewards){const names=[...new Set((rewards||[]).filter(x=>typeof x==='string'&&x.trim()))],key=JSON.stringify(names);rewardListMsg.textContent=names.length?'':'No rewards are marked displayable yet.';rewardListMsg.hidden=!!names.length;if(key===rewardListKey)return;rewardListKey=key;rewardList.replaceChildren(...names.map(name=>el('li',{},el('span',{'aria-hidden':'true'},'✦'),el('strong',{},name))));}
  const history=el('div',{class:'dc-history',hidden:true}),historyList=el('div',{class:'dc-activity'});history.append(el('h3',{},'Completed daily rewards'),el('p',{class:'sub'},'Rewards marked done by staff and Displayable by the Owner. Latest 100 completed rewards.'),historyList);wrap.append(history);
  let historyKey='';
  function applyBoard(data){board=data;setClock(data);render();}
@@ -50,7 +54,7 @@
   }
  }
  async function reveal(position){if(busy||!token)return;busy=true;render();msg.textContent='Revealing your card…';try{const d=await rpc('gw_cards_reveal',{p_token:token,p_position:position});applyBoard(d.board);msg.textContent='Card '+position+' revealed. Staff can check your CID and confirm the reward. '+(d.board.remaining?d.board.remaining+' reveals left.':'All 3 reveals used. Come back after 6 AM.');}catch(e){if(e.data?.expired){storeToken('');board=null;}if(e.data?.board)applyBoard(e.data.board);msg.textContent=e.message;}finally{busy=false;render();}}
- async function loadPublic(){try{const d=await rpc('gw_cards_public');enabled=d.enabled;setClock(d);if(!token)msg.textContent=enabled?'Sign in with the CID and code provided by the Owner.':'Daily cards will open after the Owner sets the rewards and enables the game.';render();}catch(e){msg.textContent='Daily cards are temporarily unavailable. '+e.message;}}
+ async function loadPublic(quiet=false){if(publicLoading)return;publicLoading=true;try{const d=await rpc('gw_cards_public');enabled=d.enabled;setClock(d);renderPublicRewards(d.displayable_rewards);if(!token&&!quiet)msg.textContent=enabled?'Sign in with the CID and code provided by the Owner.':'Daily cards will open after the Owner sets the rewards and enables the game.';render();}catch(e){if(!quiet){msg.textContent='Daily cards are temporarily unavailable. '+e.message;rewardListMsg.hidden=false;rewardListMsg.textContent='Rewards could not be loaded. Please refresh the page.';}}finally{publicLoading=false;}}
  async function loadStatus(){if(!token||refreshing||busy)return;refreshing=true;const requestToken=token;try{const d=await rpc('gw_cards_status',{p_token:requestToken});if(token!==requestToken)return;enabled=d.enabled;customer=d.name?d.name+' · '+d.cid:d.cid;applyBoard(d.board);if(!enabled)msg.textContent='Daily cards are paused. Your revealed rewards remain saved.';}catch(e){if(token!==requestToken)return;if(e.data?.expired){storeToken('');board=null;render();}msg.textContent=e.message;}finally{refreshing=false;}}
 
  // Owner controls. Customers reuse Owner-chosen codes; only their hashes are stored.
@@ -81,7 +85,7 @@
    ownerMsg.textContent='Rewards and probabilities saved. Existing daily sets stay unchanged.';await loadPublic();
   }catch(e){ownerMsg.textContent=e.message;}finally{savingSettings=false;updateTotal();}}},
    el('h4',{},'Rewards & probabilities'),el('p',{class:'sub'},'Set the chance of each reward on a single card. Percentages must total 100%. Each of the 10 cards draws independently, so rewards can repeat. Set 0% to disable a reward; use “Try again” for no reward.'),
-   el('p',{class:'sub'},'Displayable rewards appear to customers only after an employee marks them done. Unchecked rewards stay visible to staff only. These settings apply to daily sets that have not started.'),
+   el('p',{class:'sub'},'Displayable rewards are listed beneath the cards. A customer’s own winning reward appears after an employee marks it done. Unchecked rewards stay visible to staff only. Card settings apply to daily sets that have not started.'),
    el('label',{class:'dc-toggle'},active,'Enable daily cards'),el('div',{class:'dc-reward-fields'},...rewardInputs.map((input,i)=>el('div',{class:'dc-reward-option'},el('label',{},'Reward '+(i+1),input),el('label',{},'Chance (%)',chanceInputs[i]),el('label',{class:'dc-display-toggle'},displayInputs[i],'Displayable')))),totalLabel,el('div',{class:'row'},saveSettings,equal));
   updateTotal();
   const codeInput=label=>el('input',{type:'password',required:true,minlength:6,maxlength:32,pattern:'[A-Za-z0-9]{6,32}',autocomplete:'new-password',placeholder:'6–32 letters or numbers','aria-label':label});
@@ -134,4 +138,5 @@
  document.addEventListener('gw-permissions-changed',syncAccess);window.addEventListener('gw-auth-changed',syncAccess);
  render();loadPublic().then(()=>{loadStatus();if(location.hash==='#daily-cards')section.scrollIntoView({block:'start'});});syncAccess();setInterval(tick,1000);
  setInterval(()=>{if(!document.hidden){loadStatus();syncAccess();if(!staff.hidden)lookupRewards();}},15000);
+ setInterval(()=>{if(!document.hidden)loadPublic(true);},30000);
 })();
