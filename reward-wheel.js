@@ -110,7 +110,7 @@
     var total = Number(sale && sale.total);
     if (!isFinite(total)) return Promise.resolve(null);
     var employee = String(sale.employee || '');
-    return rpc('rw_issue_code', { p_sale_id: sale.id != null ? String(sale.id) : null, p_employee: employee, p_amount: total })
+    return rpc('gw_issue_sale_reward', { p_pin: global.gwPin || '', p_sale_id: sale.id != null ? String(sale.id) : null })
       .then(function (r) {
         if (r && r.ok) { showIssued({ code: r.code, employee: employee, amount: total, wheel: r.wheel, wheelName: r.wheel_name }); return r.code; }
         return null;

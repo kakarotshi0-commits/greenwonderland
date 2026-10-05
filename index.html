@@ -113,6 +113,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 <link rel="stylesheet" href="animations.css">
 <style>#catalogAccess [hidden]{display:none!important}#catalogAccess input,#categoryBlock input{background:var(--bg);color:var(--text);border:1px solid var(--line);padding:10px;border-radius:6px}#catalogAccess{scroll-margin-top:110px}</style>
 <link rel="stylesheet" href="gw-theme.css?v=1">
+<link rel="stylesheet" href="customer-orders.css?v=1">
 </head>
 <body>
 <header><div class="nav">
@@ -334,7 +335,7 @@ function renderMenu(){
   const grid = document.getElementById('grid'), empty = document.getElementById('empty');
   if(!filtered.length){ grid.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display='none';
-  grid.innerHTML = filtered.map(it=>`<div class="card">${it.photo?`<div class="product-media"><img class="photo" src="${escapeHtml(it.photo)}" alt="${escapeHtml(it.name)}" loading="lazy"></div>`:`<div class="product-media illustrated"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[it.category]||''}</svg><span>${escapeHtml(it.category)}</span></div>`}<h3>${escapeHtml(it.name)}</h3><div class="cat">${escapeHtml(it.category)}</div>${it.description?`<p class="product-description">${escapeHtml(it.description)}</p>`:''}<div class="price">$${Number(it.price).toFixed(2)}</div></div>`).join('');
+  grid.innerHTML = filtered.map(it=>`<div class="card">${it.photo?`<div class="product-media"><img class="photo" src="${escapeHtml(it.photo)}" alt="${escapeHtml(it.name)}" loading="lazy"></div>`:`<div class="product-media illustrated"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[it.category]||''}</svg><span>${escapeHtml(it.category)}</span></div>`}<h3>${escapeHtml(it.name)}</h3><div class="cat">${escapeHtml(it.category)}</div>${it.description?`<p class="product-description">${escapeHtml(it.description)}</p>`:''}<div class="price">${Number(it.price).toFixed(2)}</div><button type="button" class="btn small gw-order-add" data-order-product="${escapeHtml(it.id)}" aria-label="Add ${escapeHtml(it.name)} to order">Add to order</button></div>`).join('');
 }
 document.getElementById('search').addEventListener('input', renderMenu);
 
@@ -456,12 +457,25 @@ document.getElementById('completeSale').addEventListener('click', async ()=>{
   const sale = {id:'s'+Date.now(), ts:new Date().toISOString(), employeeId:signedIn.id, employeeName:signedIn.name, employeeRole:signedIn.role, items:[...cart.map(c=>({name:c.name,qty:c.qty,price:c.price})), ...(disc.amount>0?[{name:disc.label,qty:1,price:-disc.amount,discount:true}]:[])], total};
   STATE.sales.push(sale);
   const lines = sale.items.map(it=>it.discount ? `- ${escapeHtml(it.name)} — -$${Math.abs(it.price*it.qty).toFixed(2)}` : `- ${escapeHtml(it.name)} x${it.qty} — $${(it.price*it.qty).toFixed(2)}`).join('\n');
-  const invoiceText = `**Green Wonderland — Sale**\nEmployee: ${sale.employeeName} (${sale.employeeRole})\nDate: ${new Date(sale.ts).toLocaleString()}\n\n${lines}\n\n**Total: $${sale.total.toFixed(2)}**`;
+  let invoiceText = `**Green Wonderland — Sale**\nEmployee: ${sale.employeeName} (${sale.employeeRole})\nDate: ${new Date(sale.ts).toLocaleString()}\n\n${lines}\n\n**Total: $${sale.total.toFixed(2)}**`;
   document.getElementById('invoiceText').textContent = invoiceText;
   document.getElementById('invoiceBox').style.display = 'block';
   cart = []; resetDiscount(); renderCart(); renderLogs();
   const r = await publishState();
   msg.textContent = msgFor(r);
+  let retryReward = document.getElementById('retrySaleReward');
+  if (!retryReward) { retryReward = document.createElement('button'); retryReward.id = 'retrySaleReward'; retryReward.type = 'button'; retryReward.className = 'btn small'; retryReward.textContent = 'Retry reward code'; document.getElementById('invoiceBox').appendChild(retryReward); }
+  async function issueReward() {
+    retryReward.hidden = true;
+    try {
+      if (!window.GWOrders) throw new Error('Reward service is still loading. Retry shortly.');
+      const reward = await window.GWOrders.issueSaleReward(sale);
+      if (reward.code) { invoiceText += '\n\nReward wheel: ' + reward.wheel_name + '\nReward code: ' + reward.code + '\nGood for one spin. Works once.'; document.getElementById('invoiceText').textContent = invoiceText; }
+    } catch (e) { msg.textContent = 'Sale saved. Reward code: ' + e.message; retryReward.hidden = false; }
+  }
+  retryReward.onclick = issueReward;
+  if (r.ok) await issueReward();
+  else retryReward.hidden = true;
   document.getElementById('copyInvoice').onclick = async ()=>{
     try{ await navigator.clipboard.writeText(invoiceText); document.getElementById('copyInvoice').textContent='Copied!'; setTimeout(()=>document.getElementById('copyInvoice').textContent='Copy invoice',1500);}catch(e){ document.getElementById('saleMsg').textContent='Copy unavailable. Select the invoice text and copy manually.'; }
   };
@@ -696,7 +710,7 @@ setInterval(updateAttendanceTimes,1000);
 <script src="gallery.js?v=staff-photos-1" defer></script>
 <script src="animations.js" defer></script>
 <script src="sales-sync.js?v=2" defer></script>
-<script src="reward-wheel.js?v=13"></script>
+<script src="reward-wheel.js?v=14"></script>
 <script>
   var GW_URL = 'https://wtiefpuczygmyjaampdg.supabase.co';
   var GW_KEY = 'sb_publishable_raWlqZYNpGUfZ05HT07u4g_mlQhGdif';
@@ -709,39 +723,7 @@ setInterval(updateAttendanceTimes,1000);
     }
   });
 
-  // After a sale: create the customer's wheel code and add it to the invoice automatically.
   var gwSeenSales = STATE.sales.length;
-  document.getElementById('completeSale').addEventListener('click', function () {
-    if (STATE.sales.length <= gwSeenSales) return;
-    var sale = STATE.sales[STATE.sales.length - 1];
-    gwSeenSales = STATE.sales.length;
-    var box = document.getElementById('invoiceText');
-    var msg = document.getElementById('saleMsg');
-
-    fetch(GW_URL + '/rest/v1/rpc/rw_issue_code', {
-      method: 'POST',
-      headers: { apikey: GW_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_sale_id: String(sale.id), p_employee: sale.employeeName, p_amount: sale.total })
-    })
-    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-    .then(function (res) {
-      if (!res.ok) throw new Error((res.j && res.j.message) || 'Request failed');
-      if (res.j && res.j.ok && res.j.code) {
-        box.textContent += '\n\n**Reward Wheel Code: ' + res.j.code + '**\nGood for one spin. Works once.';
-        var btn = document.getElementById('copyInvoice');
-        btn.onclick = async function () {
-          try {
-            await navigator.clipboard.writeText(box.textContent);
-            btn.textContent = 'Copied!';
-            setTimeout(function () { btn.textContent = 'Copy invoice'; }, 1500);
-          } catch (e) { msg.textContent = 'Copy unavailable. Select the invoice text and copy manually.'; }
-        };
-      } else if (res.j && res.j.msg) {
-        msg.textContent = res.j.msg;
-      }
-    })
-    .catch(function (e) { msg.textContent = 'Reward code error: ' + e.message; });
-  });
 </script><script src="reward-winners.js?v=5"></script>
 <script>
   RewardWinners.init({
@@ -755,5 +737,6 @@ setInterval(updateAttendanceTimes,1000);
 <script src="gw-dark-photos.js?v=2"></script>
 <script src="gw-cutout.js?v=4"></script>
 <script src="gw-favourites.js?v=1"></script>
+<script src="customer-orders.js?v=1" defer></script>
 </body>
 </html>

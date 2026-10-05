@@ -1,5 +1,17 @@
 # Green Wonderland — your standalone website
 
+## Customer orders (October 2026)
+
+Customers can use **Add to order**, choose quantities, and submit their in-game name and CID. Phone is optional. The server prices every item from the shared catalogue. Orders remain pending until a crew member with **Use point of sale** permission confirms or declines them under **Customer orders** in the crew panel.
+
+Confirmation atomically records one shared sale and issues one code for the highest enabled wheel threshold reached by the total. Declined orders create neither. The customer's private order link refreshes its status and shows the invoice, employee, and eligible reward code; it can be opened in another browser. Anyone possessing that private link can view that order. Saved order links and a pending submission are retained on the customer's device to support safe retries.
+
+The Owner has **Generate reward code · Owner only** in the crew panel, with a wheel selector and optional note. Manual codes do not create sales. Permission is checked against the shared crew roster on the server. Duplicate confirmations and retried code requests reuse their existing result.
+
+`customer-orders.sql` installs the order tables and RPCs. Direct public access to order tables is disabled. It also makes the former unauthenticated `rw_issue_code` function internal; the current POS uses `gw_issue_sale_reward` with the staff code and saved sale total. Refresh older browser tabs after deployment.
+
+Validation: rollback-only database tests cover authoritative prices, private receipt tokens, every wheel threshold, confirm/decline, role restrictions, repeat requests, and POS compatibility. An isolated browser preview exercises customer submission, employee confirmation/decline, invoice reward codes, and owner manual generation without creating live orders.
+
 Adapted from `green-wonderland.html` in your supplied ZIP. Original branding, embedded images, eight products, crew, roles, attendance and point of sale are preserved.
 
 ## Open
