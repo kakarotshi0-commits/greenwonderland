@@ -30,7 +30,7 @@
   basket=basket.filter(x=>x&&x.id!=null&&Number.isInteger(x.qty)&&x.qty>0&&x.qty<=9999);
   receipts=receipts.filter(x=>x&&typeof x.id==='string'&&/^[a-f0-9]{64}$/.test(x.token)).slice(0,20);
   if(pending&&(!pending.args||!pending.id||!/^[a-f0-9]{64}$/.test(pending.token)))pending=null;
-  let wheels=[], current=null, currentOrder=null, sending=false, receiptBusy=false, queueBusy=false, queueVersion=0, manualRequest=null;
+  let wheels=[], current=null, currentOrder=null, sending=false, receiptBusy=false, queueBusy=false, lastQueueSignature='', queueVersion=0, manualRequest=null;
   const section=el('section',{id:'customer-order'}), wrap=el('div',{class:'wrap'});
   section.append(wrap);$('menu').after(section);
   const basketRows=el('div',{id:'customerCartRows'}), cartTotal=el('strong',{id:'customerCartTotal'}), eligibility=el('p',{class:'sub',id:'customerRewardTier'});
@@ -142,6 +142,7 @@
     if(!force&&queue.contains(document.activeElement))return;
     queueBusy=true;const version=queueVersion,code=window.gwPin,status=filter.value;
     try{const data=await rpc('gw_order_queue',{p_pin:code,p_status:status});if(version!==queueVersion||code!==window.gwPin||status!==filter.value)return;
+      const signature=JSON.stringify([status,data.orders]);if(!force&&signature===lastQueueSignature)return;lastQueueSignature=signature;
       queue.replaceChildren();staffMsg.textContent=data.orders.length+' '+status+' order(s). Showing up to 100, newest first.';
       if(!data.orders.length)queue.append(el('p',{class:'sub'},'No '+status+' orders.'));
       data.orders.forEach(o=>{
@@ -175,7 +176,7 @@
   function syncAccess(){
     const next=(signedIn?.id||'')+'|'+(signedIn?.role||'')+'|'+!!window.gwPin;
     staff.hidden=!canStaff();manual.hidden=!isOwner();
-    if(next!==identity){identity=next;queueVersion++;queue.replaceChildren();manualResult.hidden=true;manualRequest=null;generate.disabled=false;another.hidden=copyManual.hidden=true;
+    if(next!==identity){identity=next;queueVersion++;lastQueueSignature='';queue.replaceChildren();manualResult.hidden=true;manualRequest=null;generate.disabled=false;another.hidden=copyManual.hidden=true;
       staffMsg.textContent=canStaff()&&!window.gwPin?'Sign out and sign in again with your code to load shared orders.':'';if(canStaff())loadQueue(true);}
   }
   window.GWOrders={issueSaleReward:async sale=>{if(!pin())throw new Error('Sign in with your staff code to issue the reward.');return rpc('gw_issue_sale_reward',{p_pin:window.gwPin,p_sale_id:String(sale.id)});}};

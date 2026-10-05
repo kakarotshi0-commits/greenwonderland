@@ -24,16 +24,25 @@
  function setClock(data){resetAt=Date.parse(data.reset_at);serverOffset=Date.parse(data.server_now)-Date.now();tick();}
  function tick(){if(!resetAt){clock.textContent='Reset · 6 AM (Bangladesh)';return;}const secs=Math.max(0,Math.ceil((resetAt-Date.now()-serverOffset)/1000));const hh=String(Math.floor(secs/3600)).padStart(2,'0'),mm=String(Math.floor(secs%3600/60)).padStart(2,'0'),ss=String(secs%60).padStart(2,'0');clock.textContent='Resets in '+hh+':'+mm+':'+ss+' · 6 AM';if(!secs){resetAt=0;if(token){storeToken('');board=null;customer='';render();msg.textContent='A new day has started. Sign in again for your 3 reveals.';}loadPublic();}}
  function applyBoard(data){board=data;setClock(data);render();}
+ const cardNodes=[];
+ const setText=(node,value)=>{if(node.textContent!==value)node.textContent=value;};
  function render(){
   login.hidden=!!token;signed.hidden=!token;who.textContent=customer;logout.disabled=busy;signin.disabled=busy||!enabled;
   count.textContent=token&&board?board.remaining+' of 3 reveals left':'3 reveals per day';
-  grid.replaceChildren();
   for(let i=1;i<=10;i++){
    const c=board?.cards.find(x=>x.position===i),opened=!!token&&!!c?.revealed;
-   const card=button('',()=>reveal(i),'dc-card'+(opened?' is-revealed':''));card.disabled=opened||busy||!enabled||!token||!board||board.remaining===0;
-   card.setAttribute('aria-label',opened?'Card '+i+': '+c.reward:'Reveal card '+i);card.setAttribute('aria-pressed',String(opened));
-   card.append(el('span',{class:'dc-card-number'},String(i).padStart(2,'0')),el('span',{class:'dc-symbol','aria-hidden':'true'},opened?'✦':'✧'),el('strong',{class:'dc-card-title'},opened?c.reward:'GREEN WONDERLAND'),el('span',{class:'dc-card-hint'},opened?'Revealed':!token?'Sign in to reveal':board?.remaining===0?'Back tomorrow':'Tap to reveal'));
-   grid.append(card);
+   if(!cardNodes[i]){
+    const card=button('',()=>reveal(i),'dc-card'),symbol=el('span',{class:'dc-symbol','aria-hidden':'true'}),title=el('strong',{class:'dc-card-title'}),hint=el('span',{class:'dc-card-hint'});
+    card.append(el('span',{class:'dc-card-number'},String(i).padStart(2,'0')),symbol,title,hint);grid.append(card);cardNodes[i]={card,symbol,title,hint};
+   }
+   const {card,symbol,title,hint}=cardNodes[i];
+   const cls='dc-card'+(opened?' is-revealed':''),label=opened?'Card '+i+': '+c.reward:'Reveal card '+i;
+   if(card.className!==cls)card.className=cls;
+   card.disabled=opened||busy||!enabled||!token||!board||board.remaining===0;
+   if(card.getAttribute('aria-label')!==label)card.setAttribute('aria-label',label);
+   if(card.getAttribute('aria-pressed')!==String(opened))card.setAttribute('aria-pressed',String(opened));
+   setText(symbol,opened?'✦':'✧');setText(title,opened?c.reward:'GREEN WONDERLAND');
+   setText(hint,opened?'Revealed':!token?'Sign in to reveal':board?.remaining===0?'Back tomorrow':'Tap to reveal');
   }
  }
  async function reveal(position){if(busy||!token)return;busy=true;render();msg.textContent='Revealing your card…';try{const d=await rpc('gw_cards_reveal',{p_token:token,p_position:position});applyBoard(d.board);const reward=d.board.cards.find(x=>x.position===position)?.reward;msg.textContent='Card '+position+': '+reward+'. '+(d.board.remaining?d.board.remaining+' reveals left.':'All 3 reveals used. Come back after 6 AM.');}catch(e){if(e.data?.expired){storeToken('');board=null;}if(e.data?.board)applyBoard(e.data.board);msg.textContent=e.message;}finally{busy=false;render();}}
