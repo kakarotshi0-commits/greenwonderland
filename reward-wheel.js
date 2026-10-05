@@ -318,6 +318,14 @@
     });
     resetInspection();
     var wname = h('div', { class: 'gwrw-wname', 'aria-live': 'polite' });
+    var wheelPicker = h('div', { class: 'gwrw-wheel-picker', role: 'group', 'aria-label': 'Choose a wheel to preview' });
+    var previewHint = h('p', { class: 'gwrw-hint' }), previewButtons = [], selectedWheel = null;
+    function updateWheelPicker() {
+      previewButtons.forEach(function (entry) {
+        entry.button.disabled = busy || finished;
+        entry.button.setAttribute('aria-pressed', String(String(entry.id) === String(selectedWheel)));
+      });
+    }
     var mute = h('button', { class: 'gwrw-mute', type: 'button', onclick: function () { sound = !sound; mute.textContent = 'Sound: ' + (sound ? 'on' : 'off'); } }, 'Sound: on');
     function tick() { pointer.classList.remove('gwrw-tick'); void pointer.offsetWidth; pointer.classList.add('gwrw-tick'); tickSnd(); }
     var claimBox = h('div', { class: 'gwrw-claim' });
@@ -327,14 +335,28 @@
       m.classList.add('gwrw-t-' + t);
     }
 
-    /* Before a code is entered, show the lowest wheel. The code decides which wheel is actually spun. */
+    function previewWheel(w) {
+      if (busy || finished) return;
+      selectedWheel = w.id;
+      st.pz = shown(w.prizes); st.rot = 0; st.win = -1; st.step = null;
+      renderRewards(); st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
+      wname.textContent = w.name || 'Reward wheel';
+      msg.className = 'gwrw-msg'; msg.textContent = '';
+      if (st.pz.length < 2) { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'The wheel is not set up yet. Ask the owner to add rewards.'; }
+      updateWheelPicker();
+    }
+    /* Every enabled wheel can be previewed; the server still chooses the wheel for a spin code. */
     fetchWheels().then(function (ws) {
-      var w = ws[0], pz = shown(w.prizes);
       multi = ws.length > 1;
-      if (pz.length >= 2) {
-        st.pz = pz; renderRewards(); st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
-        wname.textContent = multi ? 'Enter your code to unlock your wheel' : '';
-      } else { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'The wheel is not set up yet. Ask the owner to add rewards.'; }
+      if (multi) {
+        previewHint.textContent = 'Choose a wheel to explore its rewards. Your code determines which wheel you spin.';
+        ws.forEach(function (w) {
+          var button = h('button', { type: 'button', class: 'gwrw-wheel-choice', 'aria-pressed': 'false', onclick: function () { previewWheel(w); } }, w.name || 'Wheel ' + w.id);
+          previewButtons.push({ id: w.id, button: button }); wheelPicker.appendChild(button);
+        });
+      }
+      if (!busy && !usedCode) previewWheel(ws[0]);
+      updateWheelPicker();
     }).catch(function (e) { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'Could not load the wheel: ' + e.message; });
 
     function showClaimForm() {
@@ -366,16 +388,18 @@
       nameIn.focus();
     }
 
-    function fail(text) { busy = false; go.disabled = false; msg.className = 'gwrw-msg gwrw-err'; msg.textContent = text; }
+    function fail(text) { busy = false; go.disabled = false; updateWheelPicker(); msg.className = 'gwrw-msg gwrw-err'; msg.textContent = text; }
     function run() {
       if (finished) return closeModal();
       if (busy) return;
       busy = true; go.disabled = true; msg.className = 'gwrw-msg'; msg.textContent = 'Checking code\u2026';
+      updateWheelPicker();
       resetInspection();
       rpc('rw_redeem', { p_code: input.value }).then(function (res) {
         if (!res.ok) return fail(res.msg);
         var w = res.wheel || { id: 1, name: 'Classic', theme: 'classic' }, pz = shown(res.prizes);
         usedCode = input.value; input.disabled = true;
+        selectedWheel = w.id; updateWheelPicker();
         st.theme = THEMES[w.theme] ? w.theme : 'classic'; applyTheme(st.theme);
         st.pz = pz; renderRewards(); st.rot = 0; st.win = -1; st.step = null;
         wname.textContent = w.name || '';
@@ -393,7 +417,7 @@
     go.addEventListener('click', run);
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') run(); });
     openModal('Spin the wheel', h('div', { class: 'gwrw-body' },
-      wname,
+      wheelPicker, previewHint, wname,
       h('div', { class: 'gwrw-wheelbox' }, pointer, cv), detail,
       h('div', { class: 'gwrw-row' }, input, go), mute, msg,
       h('h3', null, 'All rewards'), rewardList, claimBox));
@@ -605,6 +629,7 @@
       '.gwrw-dock .gwrw-fab:not(.gwrw-fab-alt){background:linear-gradient(180deg,#b6f03d,#7fc41a);color:#0a1206;border-color:#b6f03d;font-weight:700}',
       '@media (prefers-reduced-motion:no-preference){@keyframes gwrw-pulse{0%{box-shadow:0 0 0 0 rgba(150,214,42,.55)}100%{box-shadow:0 0 0 18px rgba(150,214,42,0)}}@keyframes gwrw-wiggle{0%,88%,100%{transform:rotate(0)}91%{transform:rotate(-4deg)}94%{transform:rotate(4deg)}97%{transform:rotate(-3deg)}}@keyframes gwrw-in{from{opacity:0;transform:translateY(14px) scale(.96)}}@keyframes gwrw-winpop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}@keyframes gwrw-flick{0%{transform:translateX(-50%) rotate(-16deg)}100%{transform:translateX(-50%) rotate(0)}}.gwrw-tick{animation:gwrw-flick .14s ease-out}.gwrw-dock .gwrw-fab:not(.gwrw-fab-alt){animation:gwrw-pulse 2.2s ease-out infinite,gwrw-wiggle 6s ease-in-out infinite}.gwrw-modal{animation:gwrw-in .4s cubic-bezier(.16,1,.3,1)}.gwrw-fun .gwrw-win{animation:gwrw-winpop .6s cubic-bezier(.16,1,.3,1)}}',
       '.gwrw-wname{text-align:center;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:13px;min-height:1.4em;margin:0 0 10px;color:#96d62a}',
+      '.gwrw-wheel-picker{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.gwrw-wheel-picker:empty{display:none}.gwrw-wheel-choice{flex:1 1 100px;padding:10px 12px;border:1px solid currentColor;border-radius:10px;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer}.gwrw-wheel-choice[aria-pressed=true]{background:#e8a317;color:#142018;border-color:#e8a317}.gwrw-wheel-choice:focus-visible{outline:3px solid #ffd23f;outline-offset:3px}.gwrw-wheel-choice:disabled{opacity:.6;cursor:default}',
       '.gwrw-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}',
       '.gwrw-btn.gwrw-tab-on{background:#1f8a4c!important;color:#fff!important;border-color:#1f8a4c!important}',
       '.gwrw-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 12px}.gwrw-fields label{display:block;font-weight:600;font-size:14px}.gwrw-fields .gwrw-input{width:100%;margin-top:4px}',
