@@ -1,5 +1,17 @@
 # Green Wonderland — your standalone website
 
+## Daily cards (October 2026)
+
+Open **Daily cards** from the navigation. Customers sign in using their in-game CID and a unique code supplied by the Owner, then reveal up to 3 of 10 cards per day. The game day resets at **6 AM Asia/Dhaka (Bangladesh time)**. Customers sign in again after each reset; their code stays valid until the Owner replaces it. Refreshes, other browsers, code resets and disabling/re-enabling an account do not reset the daily reveal allowance.
+
+Under **Crew → Daily cards · Owner only**, load the controls, enter all 10 reward texts, check **Enable daily cards**, and save. Use “Try again” for a losing card, or repeat a reward across multiple cards to increase its frequency. The game starts paused until configured. Each customer's deck is securely shuffled when they first reveal a card that day. Later reward edits affect only daily sets that have not started.
+
+Use **Create ID & login code** with the customer's CID and optional name. Copy the newly generated login and share it privately; only its hash is stored, so forgotten codes must be replaced. The Owner can disable IDs, replace codes, and view the latest 100 reveals. Customer IDs are separate from crew accounts. Card rewards are displayed and logged; they do not issue wheel codes or automatically change inventory.
+
+Apply `daily-cards.sql` after `customer-orders.sql`. Tables and helper functions are private; public RPCs check customer sessions or the current Owner role. Sessions expire at the next 6 AM reset, failed logins are rate limited, and database locking enforces three reveals across concurrent requests. Only revealed card faces are sent to customers. Customer sessions use sessionStorage; a new browser requires signing in again.
+
+Validated with rollback-only SQL tests for reset boundaries, permissions, secret hashing, hidden card data, cross-session limits, idempotent retries, code replacement, disabled accounts and new days. Isolated browser tests cover owner configuration/ID creation, customer login, three reveals, reload persistence and role visibility.
+
 ## Customer orders (October 2026)
 
 Customers can use **Add to order**, choose quantities, and submit their in-game name and CID. Phone is optional. The server prices every item from the shared catalogue. Orders remain pending until a crew member with **Use point of sale** permission confirms or declines them under **Customer orders** in the crew panel.
