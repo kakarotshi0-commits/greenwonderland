@@ -360,15 +360,15 @@
     }).catch(function (e) { msg.className = 'gwrw-msg gwrw-err'; msg.textContent = 'Could not load the wheel: ' + e.message; });
 
     function showClaimForm() {
-      var nameIn = h('input', { class: 'gwrw-input', maxlength: '60', placeholder: 'In-game name', 'aria-label': 'In-game name', autocomplete: 'off' });
-      var cidIn = h('input', { class: 'gwrw-input', maxlength: '30', placeholder: 'In-game CID', 'aria-label': 'In-game CID', autocomplete: 'off' });
-      var phoneIn = h('input', { class: 'gwrw-input', type: 'tel', maxlength: '30', placeholder: 'In-game phone number', 'aria-label': 'In-game phone number', autocomplete: 'off' });
+      var nameIn = h('input', { class: 'gwrw-input', maxlength: '60', placeholder: 'In-game name (required)', 'aria-label': 'In-game name (required)', required: true, autocomplete: 'off' });
+      var cidIn = h('input', { class: 'gwrw-input', maxlength: '30', placeholder: 'In-game CID (required)', 'aria-label': 'In-game CID (required)', required: true, autocomplete: 'off' });
+      var phoneIn = h('input', { class: 'gwrw-input', type: 'tel', maxlength: '30', placeholder: 'In-game phone number (optional)', 'aria-label': 'In-game phone number (optional)', autocomplete: 'off' });
       var cmsg = h('p', { class: 'gwrw-msg', 'aria-live': 'polite' });
       var send = h('button', { class: 'gwrw-primary' }, 'Send my details');
       function cfail(t) { send.disabled = false; cmsg.className = 'gwrw-msg gwrw-err'; cmsg.textContent = t; }
       function submit() {
         var n = nameIn.value.trim(), c = cidIn.value.trim(), p = phoneIn.value.trim();
-        if (!n || !c || !p) return cfail('Please fill in all three boxes.');
+        if (!n || !c) return cfail('Please enter your name and CID. Phone number is optional.');
         send.disabled = true; cmsg.className = 'gwrw-msg'; cmsg.textContent = 'Sending\u2026';
         rpc('rw_submit_claim', { p_code: usedCode, p_name: n, p_cid: c, p_phone: p }).then(function (r) {
           if (r && r.ok) {
@@ -382,7 +382,7 @@
       claimBox.textContent = '';
       claimBox.appendChild(h('div', null,
         h('h3', null, 'Claim your reward'),
-        h('p', { class: 'gwrw-hint' }, 'Fill in your details so we can give you your reward.'),
+        h('p', { class: 'gwrw-hint' }, 'Name and CID are required to claim your reward. Phone number is optional.'),
         nameIn, cidIn, phoneIn,
         h('div', { class: 'gwrw-row' }, send), cmsg));
       nameIn.focus();
