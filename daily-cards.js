@@ -43,14 +43,14 @@
     card.append(el('span',{class:'dc-card-number'},String(i).padStart(2,'0')),symbol,title,hint);grid.append(card);cardNodes[i]={card,symbol,title,hint};
    }
    const {card,symbol,title,hint}=cardNodes[i];
-   const rewardText=c?.reward||(c?.done?'Completed':'Awaiting staff');
+   const rewardText=c?.removed?'Removed by Owner':c?.reward||(c?.done?'Completed':'Awaiting staff');
    const cls='dc-card'+(opened?' is-revealed':''),label=opened?'Card '+i+': '+rewardText:'Reveal card '+i;
    if(card.className!==cls)card.className=cls;
    card.disabled=opened||busy||!enabled||!token||!board||board.remaining===0;
    if(card.getAttribute('aria-label')!==label)card.setAttribute('aria-label',label);
    if(card.getAttribute('aria-pressed')!==String(opened))card.setAttribute('aria-pressed',String(opened));
    setText(symbol,opened?'✦':'✧');setText(title,opened?rewardText:'GREEN WONDERLAND');
-   setText(hint,opened?(c.done?'Done': 'Revealed · awaiting confirmation'):!token?'Sign in to reveal':board?.remaining===0?'Back tomorrow':'Tap to reveal');
+   setText(hint,opened?(c.removed?'Reveal removed':c.done?'Done': 'Revealed · awaiting confirmation'):!token?'Sign in to reveal':board?.remaining===0?'Back tomorrow':'Tap to reveal');
   }
  }
  async function reveal(position){if(busy||!token)return;busy=true;render();msg.textContent='Revealing your card…';try{const d=await rpc('gw_cards_reveal',{p_token:token,p_position:position});applyBoard(d.board);msg.textContent='Card '+position+' revealed. Staff can check your CID and confirm the reward. '+(d.board.remaining?d.board.remaining+' reveals left.':'All 3 reveals used. Come back after 6 AM.');}catch(e){if(e.data?.expired){storeToken('');board=null;}if(e.data?.board)applyBoard(e.data.board);msg.textContent=e.message;}finally{busy=false;render();}}
@@ -127,10 +127,15 @@
    const signature=JSON.stringify(d);if(!force&&signature===staffSignature)return;staffSignature=signature;staffList.replaceChildren();
    d.activity.forEach(r=>{
     const row=el('article',{class:'dc-staff-reward'},el('strong',{},r.reward),el('span',{},r.day+' · Card '+r.position),el('small',{},'Revealed '+new Date(r.at).toLocaleString('en-GB',{timeZone:'Asia/Dhaka'})+' (Bangladesh)'),el('small',{},r.displayable?'Displayable after completion':'Staff only · not displayable'));
-    if(r.done_at)row.append(el('span',{class:'dc-done'},'Done · '+r.employee_name+' · '+new Date(r.done_at).toLocaleString('en-GB',{timeZone:'Asia/Dhaka'})));
+    if(r.removed)row.append(el('span',{class:'dc-removed'},'Removed · '+r.removed_by+' · '+new Date(r.removed_at).toLocaleString('en-GB',{timeZone:'Asia/Dhaka'})));
+    else if(r.done_at)row.append(el('span',{class:'dc-done'},'Done · '+r.employee_name+' · '+new Date(r.done_at).toLocaleString('en-GB',{timeZone:'Asia/Dhaka'})));
     else {const done=button('Mark as done',async()=>{done.disabled=true;try{await rpc('gw_cards_staff_done',{p_pin:credential,p_cid:d.cid,p_day:r.day,p_position:r.position});if(version!==staffVersion)return;staffMsg.textContent='Reward marked done.';await lookupRewards(true);if(token)loadStatus();}catch(e){if(version===staffVersion){staffMsg.textContent=e.message;done.disabled=false;}}});row.append(done);}
+    if(isOwner()){
+     const remove=button(r.removed?'Restore reveal':'Remove reveal',async()=>{remove.disabled=true;try{await ownerCall('gw_cards_owner_remove_reveal',{p_cid:d.cid,p_day:r.day,p_position:r.position,p_remove:!r.removed});if(version!==staffVersion)return;await lookupRewards(true);if(token)loadStatus();ownerLoaded=false;loadOwner();}catch(e){if(version===staffVersion){staffMsg.textContent=e.message;remove.disabled=false;}}});
+     row.append(el('div',{class:'dc-remove-action'},remove,el('small',{},r.removed?'Restore this reward with its previous completion status.':'Owner only · hides this reward from the player and employees; daily attempts stay used.')));
+    }
     staffList.append(row);
-   });if(!d.activity.length)staffList.append(el('p',{class:'sub'},'This customer has not revealed any cards yet.'));
+   });if(!d.activity.length)staffList.append(el('p',{class:'sub'},'No active reveals found for this customer.'));
   }catch(e){if(version===staffVersion){staffMsg.textContent=e.message;staffList.replaceChildren();staffSignature='';}}finally{if(version===staffVersion){staffLoading=false;staffSearch.disabled=false;}}
  }
  function syncStaff(){const key=signedIn?(signedIn.id+'|'+window.gwPin):'';staff.hidden=!signedIn;if(key!==staffKey){staffKey=key;staffVersion++;staffLoading=false;staffSearch.disabled=false;staffQuery='';staffCID.value='';staffSignature='';staffMsg.textContent='';staffList.replaceChildren();}}
