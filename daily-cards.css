@@ -9,3 +9,5 @@
 @media(max-width:850px){.dc-grid{gap:10px}.dc-card{min-height:185px;padding:25px 10px 16px}.dc-login{grid-template-columns:1fr 1fr}.dc-login .btn{grid-column:1/-1}.dc-intro{align-items:flex-start}.dc-counter{padding:14px}.dc-activity>div{grid-template-columns:1fr 1fr}.dc-activity small{grid-column:1/-1}}
 @media(max-width:600px){.dc-intro{flex-direction:column;gap:8px}.dc-counter{width:100%;box-sizing:border-box}.dc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-card{min-height:190px}.dc-login,.dc-reward-fields{grid-template-columns:1fr}.dc-access{padding:16px}.dc-owner .row{flex-direction:column;align-items:stretch}}
 @media(prefers-reduced-motion:reduce){.dc-card{transition:none}.dc-card.is-revealed{animation:none}}
+.dc-reward-option{display:grid;grid-template-columns:minmax(0,1fr) 115px;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px}.dc-probability-total{font-weight:600;color:#2d641b}.dc-probability-total[data-valid=false]{color:#912a23}
+@media(max-width:400px){.dc-reward-option{grid-template-columns:minmax(0,1fr) 95px}}
