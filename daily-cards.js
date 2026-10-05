@@ -24,7 +24,7 @@
  function setClock(data){resetAt=Date.parse(data.reset_at);serverOffset=Date.parse(data.server_now)-Date.now();tick();}
  function tick(){if(!resetAt){clock.textContent='Reset · 6 AM (Bangladesh)';return;}const secs=Math.max(0,Math.ceil((resetAt-Date.now()-serverOffset)/1000));const hh=String(Math.floor(secs/3600)).padStart(2,'0'),mm=String(Math.floor(secs%3600/60)).padStart(2,'0'),ss=String(secs%60).padStart(2,'0');clock.textContent='Resets in '+hh+':'+mm+':'+ss+' · 6 AM';if(!secs){resetAt=0;if(token){storeToken('');board=null;customer='';render();msg.textContent='A new day has started. Sign in again for your 3 reveals.';}loadPublic();}}
  const rewardList=el('ul',{class:'dc-public-rewards'}),rewardListMsg=el('p',{class:'sub',role:'status'},'Loading rewards…');
- const rewardShowcase=el('div',{class:'dc-showcase',id:'dailyDisplayableRewards'},el('span',{class:'dc-eyebrow'},'THE REWARD COLLECTION'),el('h3',{},'Daily rewards'),el('p',{class:'sub'},'Explore the rewards selected for display by the Owner. Your own reward appears after staff marks it done.'),rewardListMsg,rewardList);wrap.append(rewardShowcase);
+ const rewardShowcase=el('div',{class:'dc-showcase',id:'dailyDisplayableRewards'},el('span',{class:'dc-eyebrow'},'THE REWARD COLLECTION'),el('h3',{},'Daily rewards'),el('p',{class:'sub'},'Explore the rewards selected for display by the Owner. Reveal a card to see your reward instantly.'),rewardListMsg,rewardList);wrap.append(rewardShowcase);
  let rewardListKey='',publicLoading=false;
  function renderPublicRewards(rewards){const names=[...new Set((rewards||[]).filter(x=>typeof x==='string'&&x.trim()))],key=JSON.stringify(names);rewardListMsg.textContent=names.length?'':'No rewards are marked displayable yet.';rewardListMsg.hidden=!!names.length;if(key===rewardListKey)return;rewardListKey=key;rewardList.replaceChildren(...names.map(name=>el('li',{},el('span',{'aria-hidden':'true'},'✦'),el('strong',{},name))));}
  const history=el('div',{class:'dc-history',hidden:true}),historyList=el('div',{class:'dc-activity'});history.append(el('h3',{},'Completed daily rewards'),el('p',{class:'sub'},'Rewards marked done by staff and Displayable by the Owner. Latest 100 completed rewards.'),historyList);wrap.append(history);
@@ -43,17 +43,17 @@
     card.append(el('span',{class:'dc-card-number'},String(i).padStart(2,'0')),symbol,title,hint);grid.append(card);cardNodes[i]={card,symbol,title,hint};
    }
    const {card,symbol,title,hint}=cardNodes[i];
-   const rewardText=c?.removed?'Removed by Owner':c?.reward||(c?.done?'Completed':'Awaiting staff');
+   const rewardText=c?.removed?'Removed by Owner':c?.reward||'Revealed';
    const cls='dc-card'+(opened?' is-revealed':''),label=opened?'Card '+i+': '+rewardText:'Reveal card '+i;
    if(card.className!==cls)card.className=cls;
    card.disabled=opened||busy||!enabled||!token||!board||board.remaining===0;
    if(card.getAttribute('aria-label')!==label)card.setAttribute('aria-label',label);
    if(card.getAttribute('aria-pressed')!==String(opened))card.setAttribute('aria-pressed',String(opened));
    setText(symbol,opened?'✦':'✧');setText(title,opened?rewardText:'GREEN WONDERLAND');
-   setText(hint,opened?(c.removed?'Reveal removed':c.done?'Done': 'Revealed · awaiting confirmation'):!token?'Sign in to reveal':board?.remaining===0?'Back tomorrow':'Tap to reveal');
+   setText(hint,opened?(c.removed?'Reveal removed':c.done?'Done': 'Revealed'):!token?'Sign in to reveal':board?.remaining===0?'Back tomorrow':'Tap to reveal');
   }
  }
- async function reveal(position){if(busy||!token)return;busy=true;render();msg.textContent='Revealing your card…';try{const d=await rpc('gw_cards_reveal',{p_token:token,p_position:position});applyBoard(d.board);msg.textContent='Card '+position+' revealed. Staff can check your CID and confirm the reward. '+(d.board.remaining?d.board.remaining+' reveals left.':'All 3 reveals used. Come back after 6 AM.');}catch(e){if(e.data?.expired){storeToken('');board=null;}if(e.data?.board)applyBoard(e.data.board);msg.textContent=e.message;}finally{busy=false;render();}}
+ async function reveal(position){if(busy||!token)return;busy=true;render();msg.textContent='Revealing your card…';try{const d=await rpc('gw_cards_reveal',{p_token:token,p_position:position});applyBoard(d.board);const card=d.board.cards.find(x=>x.position===position);msg.textContent='Card '+position+': '+(card?.removed?'Removed by Owner':card?.reward||'Revealed')+'. '+(d.board.remaining?d.board.remaining+' reveals left.':'All 3 reveals used. Come back after 6 AM.');}catch(e){if(e.data?.expired){storeToken('');board=null;}if(e.data?.board)applyBoard(e.data.board);msg.textContent=e.message;}finally{busy=false;render();}}
  async function loadPublic(quiet=false){if(publicLoading)return;publicLoading=true;try{const d=await rpc('gw_cards_public');enabled=d.enabled;setClock(d);renderPublicRewards(d.displayable_rewards);if(!token&&!quiet)msg.textContent=enabled?'Sign in with the CID and code provided by the Owner.':'Daily cards will open after the Owner sets the rewards and enables the game.';render();}catch(e){if(!quiet){msg.textContent='Daily cards are temporarily unavailable. '+e.message;rewardListMsg.hidden=false;rewardListMsg.textContent='Rewards could not be loaded. Please refresh the page.';}}finally{publicLoading=false;}}
  async function loadStatus(){if(!token||refreshing||busy)return;refreshing=true;const requestToken=token;try{const d=await rpc('gw_cards_status',{p_token:requestToken});if(token!==requestToken)return;enabled=d.enabled;customer=d.name?d.name+' · '+d.cid:d.cid;applyBoard(d.board);if(!enabled)msg.textContent='Daily cards are paused. Your revealed rewards remain saved.';}catch(e){if(token!==requestToken)return;if(e.data?.expired){storeToken('');board=null;render();}msg.textContent=e.message;}finally{refreshing=false;}}
 
@@ -85,7 +85,7 @@
    ownerMsg.textContent='Rewards and probabilities saved. Existing daily sets stay unchanged.';await loadPublic();
   }catch(e){ownerMsg.textContent=e.message;}finally{savingSettings=false;updateTotal();}}},
    el('h4',{},'Rewards & probabilities'),el('p',{class:'sub'},'Set the chance of each reward on a single card. Percentages must total 100%. Each of the 10 cards draws independently, so rewards can repeat. Set 0% to disable a reward; use “Try again” for no reward.'),
-   el('p',{class:'sub'},'Displayable rewards are listed beneath the cards. A customer’s own winning reward appears after an employee marks it done. Unchecked rewards stay visible to staff only. Card settings apply to daily sets that have not started.'),
+   el('p',{class:'sub'},'Customers see the actual reward as soon as they reveal a card. Displayable controls the public reward collection and completed reward history. Staff can still mark rewards done separately. Card settings apply to daily sets that have not started.'),
    el('label',{class:'dc-toggle'},active,'Enable daily cards'),el('div',{class:'dc-reward-fields'},...rewardInputs.map((input,i)=>el('div',{class:'dc-reward-option'},el('label',{},'Reward '+(i+1),input),el('label',{},'Chance (%)',chanceInputs[i]),el('label',{class:'dc-display-toggle'},displayInputs[i],'Displayable')))),totalLabel,el('div',{class:'row'},saveSettings,equal));
   updateTotal();
   const codeInput=label=>el('input',{type:'password',required:true,minlength:6,maxlength:32,pattern:'[A-Za-z0-9]{6,32}',autocomplete:'new-password',placeholder:'6–32 letters or numbers','aria-label':label});
@@ -126,7 +126,7 @@
    staffMsg.textContent=d.cid+(d.name?' · '+d.name:'')+' — '+d.activity.length+' revealed card(s).';
    const signature=JSON.stringify(d);if(!force&&signature===staffSignature)return;staffSignature=signature;staffList.replaceChildren();
    d.activity.forEach(r=>{
-    const row=el('article',{class:'dc-staff-reward'},el('strong',{},r.reward),el('span',{},r.day+' · Card '+r.position),el('small',{},'Revealed '+new Date(r.at).toLocaleString('en-GB',{timeZone:'Asia/Dhaka'})+' (Bangladesh)'),el('small',{},r.displayable?'Displayable after completion':'Staff only · not displayable'));
+    const row=el('article',{class:'dc-staff-reward'},el('strong',{},r.reward),el('span',{},r.day+' · Card '+r.position),el('small',{},'Revealed '+new Date(r.at).toLocaleString('en-GB',{timeZone:'Asia/Dhaka'})+' (Bangladesh)'),el('small',{},r.displayable?'Displayable in reward collection and history':'Not listed in reward collection or history'));
     if(r.removed)row.append(el('span',{class:'dc-removed'},'Removed · '+r.removed_by+' · '+new Date(r.removed_at).toLocaleString('en-GB',{timeZone:'Asia/Dhaka'})));
     else if(r.done_at)row.append(el('span',{class:'dc-done'},'Done · '+r.employee_name+' · '+new Date(r.done_at).toLocaleString('en-GB',{timeZone:'Asia/Dhaka'})));
     else {const done=button('Mark as done',async()=>{done.disabled=true;try{await rpc('gw_cards_staff_done',{p_pin:credential,p_cid:d.cid,p_day:r.day,p_position:r.position});if(version!==staffVersion)return;staffMsg.textContent='Reward marked done.';await lookupRewards(true);if(token)loadStatus();}catch(e){if(version===staffVersion){staffMsg.textContent=e.message;done.disabled=false;}}});row.append(done);}
