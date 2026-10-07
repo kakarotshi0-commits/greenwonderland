@@ -77,3 +77,7 @@ Apply `daily-cards-removal.sql` after public rewards. Owner can remove or restor
 Apply `daily-cards-immediate-reveal.sql` after removal: players now see every actual revealed reward immediately, including Try again. Displayable controls the public collection and completed history, not the immediate card result. Staff completion stays separate; removed rewards remain hidden and unrevealed cards stay private.
 
 Apply `daily-cards-symbol-codes.sql` after immediate reveal to accept symbols in fixed CID codes (6–32 characters, no spaces). New codes preserve symbols, including hyphens, and remain case-insensitive. Existing codes keep their previous normalization until the Owner changes them. Only hashes are stored; changed codes revoke old sessions without changing reveals.
+
+Owner controls now open as collapsed categories, one at a time; other staff keep their existing layout. Customer orders default to All orders with pending orders first, status badges, and a pending count. Refreshes preserve unchanged rows and typed decline reasons.
+
+Apply `customer-orders-approval.sql` after the order and random-wheel migrations. Private receipts hide reward codes until confirmation, and redemption independently rejects codes linked to pending, declined or missing orders. Eligible codes are still issued atomically with employee confirmation; Owner manual codes and completed POS sales retain their existing behavior.

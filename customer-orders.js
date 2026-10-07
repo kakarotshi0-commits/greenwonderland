@@ -30,7 +30,7 @@
   basket=basket.filter(x=>x&&x.id!=null&&Number.isInteger(x.qty)&&x.qty>0&&x.qty<=9999);
   receipts=receipts.filter(x=>x&&typeof x.id==='string'&&/^[a-f0-9]{64}$/.test(x.token)).slice(0,20);
   if(pending&&(!pending.args||!pending.id||!/^[a-f0-9]{64}$/.test(pending.token)))pending=null;
-  let wheels=[], current=null, currentOrder=null, sending=false, receiptBusy=false, queueBusy=false, lastQueueSignature='', queueVersion=0, manualRequest=null;
+  let wheels=[], current=null, currentOrder=null, sending=false, receiptBusy=false, queueBusy=false, queueAgain=false, lastQueueSignature='', queueVersion=0, manualRequest=null;
   const section=el('section',{id:'customer-order'}), wrap=el('div',{class:'wrap'});
   section.append(wrap);$('menu').after(section);
   const basketRows=el('div',{id:'customerCartRows'}), cartTotal=el('strong',{id:'customerCartTotal'}), eligibility=el('p',{class:'sub',id:'customerRewardTier'});
@@ -90,13 +90,14 @@
       pending={id,token,args:{p_id:id,p_token:token,p_name:name.value.trim(),p_cid:cid.value.trim(),p_phone:phone.value.trim(),p_items:basket.map(x=>({id:x.id,qty:x.qty})),p_expected_total:basketTotal()}};
       save('gw-customer-pending-v1',pending);
     }
-    sending=true;renderBasket();notice.textContent='Sending your order…';
+    sending=true;receiptBox.hidden=true;renderBasket();notice.textContent='Sending your order…';
     try{
       const data=await rpc('gw_place_order',pending.args);
       current={id:pending.id,token:pending.token};remember(current);
       pending=null;save('gw-customer-pending-v1',null);basket=[];save('gw-customer-cart-v1',basket);
       history.replaceChildren();renderHistory();showReceipt(data.order);
       notice.textContent='Order sent. Keep your private order link to view its status and invoice on any browser.';
+      loadQueue(true);
       receiptBox.scrollIntoView({behavior:'smooth',block:'start'});
     }catch(e){notice.textContent=e.message;if(e.definitive){pending=null;save('gw-customer-pending-v1',null);}}
     finally{sending=false;renderBasket();}
@@ -106,7 +107,7 @@
     return ['GREEN WONDERLAND — '+(o.status==='confirmed'?'INVOICE':'ORDER'), 'Order: '+o.id,'Status: '+o.status.toUpperCase(),'Placed: '+new Date(o.created_at).toLocaleString(),
       'Name: '+o.customer_name,'CID: '+o.customer_cid,...(o.customer_phone?['Phone: '+o.customer_phone]:[]),'',...o.items.map(x=>x.name+' × '+x.qty+' — '+money(x.price*x.qty)),
       '', 'Total: '+money(o.total),...(o.employee_name?['Handled by: '+o.employee_name]:[]),...(o.decline_reason?['Reason: '+o.decline_reason]:[]),
-      ...(o.reward_code?['','Reward wheel: '+o.wheel_name,'Reward code: '+o.reward_code,'One spin. Each code works once.']:o.status==='confirmed'?['This order does not qualify for a wheel code.']:o.status==='declined'?['No sale or reward code was issued.']:['Reward eligibility is checked after staff confirmation.'])].join('\n');
+      ...(o.status==='confirmed'&&o.reward_code?['','Reward wheel: '+o.wheel_name,'Reward code: '+o.reward_code,'Active — one spin. Each code works once.']:o.status==='confirmed'?['This order does not qualify for a wheel code.']:o.status==='declined'?['No active reward code. This order was declined.']:['Wheel reward locked — an employee must confirm this order first.'])].join('\n');
   }
   async function copy(text,where){try{await navigator.clipboard.writeText(text);where.textContent='Copied.';}catch{where.textContent='Copy unavailable. Select the displayed text to copy it.';}}
   function showReceipt(o){
@@ -119,7 +120,7 @@
     receiptBox.append(el('div',{class:'section-head'},el('h3',{},o.status==='confirmed'?'Your invoice':'Order status'),el('span',{class:'gw-order-badge '+o.status},o.status)),
       el('p',{class:'sub'},o.status==='pending'?'Waiting for staff. This page refreshes automatically.':o.status==='declined'?'Staff declined this order. You can place a new order.':'Confirmed. Your invoice is ready.'),display,actions,
       el('p',{class:'sub'},'Keep this link private: anyone with it can view this invoice and its reward code.'),el('input',{readonly:true,value:link.href,'aria-label':'Private order link',class:'gw-private-link'}),status);
-    if(o.reward_code&&window.RewardWheel)actions.append(button('Open reward wheel',()=>RewardWheel.openSpin()));
+    if(o.status==='confirmed'&&o.reward_code&&window.RewardWheel)actions.append(button('Open reward wheel',()=>RewardWheel.openSpin()));
   }
   async function refreshReceipt(){
     if(!current||receiptBusy)return;receiptBusy=true;const ref=current;
@@ -131,22 +132,31 @@
 
   // Staff order queue; secrets are never stored with public catalogue or receipts.
   const staff=el('div',{class:'card2',id:'staffOrders',hidden:true}), queue=el('div',{id:'staffOrderList'}),staffMsg=el('p',{class:'msg',role:'status'});
-  const filter=el('select',{'aria-label':'Order status filter'},...['pending','confirmed','declined'].map(s=>el('option',{value:s},s[0].toUpperCase()+s.slice(1))));
+  const filter=el('select',{'aria-label':'Order status filter'},...['all','pending','confirmed','declined'].map(s=>el('option',{value:s},s==='all'?'All orders':s[0].toUpperCase()+s.slice(1))));
+  const orderAlert=el('a',{href:'#staffOrders',class:'btn small',id:'staffOrderAlert',hidden:true},'Customer orders');
+  $('crewPanel').prepend(orderAlert);
   filter.addEventListener('change',()=>loadQueue(true));
   staff.append(el('h3',{},'Customer orders'),el('p',{class:'sub'},'Confirm only after checking the order. Confirmation records the sale and issues any eligible wheel code.'),el('div',{class:'row'},filter,button('Refresh orders',()=>loadQueue(true))),staffMsg,queue);$('crewPanel').append(staff);
   const isOwner=()=>!!signedIn&&String(signedIn.role).trim().toLowerCase()==='owner';
   const canStaff=()=>!!signedIn&&(isOwner()||getPerms(signedIn.role).sell);
   function pin(){if(!window.gwPin){const p=window.prompt('Enter your staff code to manage shared orders:');if(p?.trim())window.gwPin=p.trim();}return window.gwPin||'';}
   async function loadQueue(force=false){
-    if(!canStaff()||!window.gwPin||queueBusy)return;
-    if(!force&&queue.contains(document.activeElement))return;
+    if(!canStaff()||!window.gwPin)return;
+    if(queueBusy){if(force)queueAgain=true;return;}
     queueBusy=true;const version=queueVersion,code=window.gwPin,status=filter.value;
     try{const data=await rpc('gw_order_queue',{p_pin:code,p_status:status});if(version!==queueVersion||code!==window.gwPin||status!==filter.value)return;
+      const pendingCount=Number(data.pending_count??data.orders.filter(o=>o.status==='pending').length);
+      orderAlert.textContent='Customer orders · '+pendingCount+' pending';
       const signature=JSON.stringify([status,data.orders]);if(!force&&signature===lastQueueSignature)return;lastQueueSignature=signature;
-      queue.replaceChildren();staffMsg.textContent=data.orders.length+' '+status+' order(s). Showing up to 100, newest first.';
-      if(!data.orders.length)queue.append(el('p',{class:'sub'},'No '+status+' orders.'));
+      staffMsg.textContent=pendingCount+' pending · '+data.orders.length+' shown. '+(status==='all'?'Pending first, then most recent.':'Filtered to '+status+'.');
+      const previous=new Map([...queue.querySelectorAll('.gw-staff-order')].map(card=>[card.dataset.orderId,card]));
+      const cards=[];
+      if(!data.orders.length)cards.push(el('p',{class:'sub'},status==='all'?'No orders yet.':'No '+status+' orders.'));
       data.orders.forEach(o=>{
-        const card=el('article',{class:'gw-staff-order'}), info=el('details',{},el('summary',{},o.customer_name+' · '+money(o.total)+' · '+o.id.slice(0,8)),el('pre',{class:'gw-order-invoice'},invoiceText(o)));
+        const old=previous.get(o.id), rowSignature=JSON.stringify(o);
+        if(old?.dataset.signature===rowSignature){cards.push(old);return;}
+        const card=el('article',{class:'gw-staff-order','data-order-id':o.id,'data-signature':rowSignature}), info=el('details',{},el('summary',{},o.customer_name+' · CID '+o.customer_cid+' · '+money(o.total)+' · ',el('span',{class:'gw-order-badge '+o.status},o.status)),el('pre',{class:'gw-order-invoice'},invoiceText(o)));
+        info.open=old?.querySelector('details')?.open||false;
         card.append(info);
         if(o.status==='pending'){
           const reason=el('input',{maxlength:300,placeholder:'Decline reason (optional)','aria-label':'Decline reason for '+o.id.slice(0,8)});
@@ -158,9 +168,12 @@
           const ok=button('Confirm order',()=>act('confirmed'),'btn solid small'),no=button('Decline order',()=>act('declined'));
           card.append(el('div',{class:'row'},ok,no,reason));
         }else card.append(button('Copy invoice',()=>copy(invoiceText(o),staffMsg)));
-        queue.append(card);
+        cards.push(card);
       });
-    }catch(e){if(version===queueVersion)staffMsg.textContent=e.message;}finally{queueBusy=false;}
+      // Keep unchanged rows in place so polling never discards typed decline reasons or focus.
+      [...queue.children].forEach(card=>{if(!cards.includes(card))card.remove();});
+      cards.forEach((card,i)=>{if(queue.children[i]!==card)queue.insertBefore(card,queue.children[i]||null);});
+    }catch(e){if(version===queueVersion)staffMsg.textContent='Could not load orders: '+e.message;}finally{queueBusy=false;if(queueAgain){queueAgain=false;loadQueue(true);}}
   }
   const manual=el('div',{class:'card2',id:'ownerRewardCodes',hidden:true}),wheelSelect=el('select',{'aria-label':'Wheel for manual code',required:true}),note=el('input',{maxlength:300,placeholder:'Reason or note (optional)','aria-label':'Code note'}),manualMsg=el('p',{class:'msg',role:'status'}),manualResult=el('pre',{class:'gw-order-invoice',hidden:true});
   const generate=button('Generate reward code',async()=>{
@@ -174,14 +187,16 @@
   manual.append(el('h3',{},'Generate reward code · Owner only'),el('p',{class:'sub'},'Create a one-use code for a chosen wheel. This does not create a sale.'),el('div',{class:'row'},wheelSelect,note,generate,another,copyManual),manualResult,manualMsg);$('crewPanel').append(manual);
   let identity='';
   function syncAccess(){
-    const next=(signedIn?.id||'')+'|'+(signedIn?.role||'')+'|'+!!window.gwPin;
-    staff.hidden=!canStaff();manual.hidden=!isOwner();
+    const next=(signedIn?.id||'')+'|'+(signedIn?.role||'')+'|'+(window.gwPin||'')+'|'+canStaff();
+    staff.hidden=!canStaff();orderAlert.hidden=!canStaff();manual.hidden=!isOwner();
     if(next!==identity){identity=next;queueVersion++;lastQueueSignature='';queue.replaceChildren();manualResult.hidden=true;manualRequest=null;generate.disabled=false;another.hidden=copyManual.hidden=true;
       staffMsg.textContent=canStaff()&&!window.gwPin?'Sign out and sign in again with your code to load shared orders.':'';if(canStaff())loadQueue(true);}
   }
   window.GWOrders={issueSaleReward:async sale=>{if(!pin())throw new Error('Sign in with your staff code to issue the reward.');return rpc('gw_issue_sale_reward',{p_pin:window.gwPin,p_sale_id:String(sale.id)});}};
   document.addEventListener('gw-permissions-changed',syncAccess);window.addEventListener('gw-auth-changed',syncAccess);
   window.addEventListener('hashchange',readOrderLink);
+  window.addEventListener('focus',()=>{syncAccess();refreshReceipt();loadQueue(true);});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){syncAccess();refreshReceipt();loadQueue(true);}});
   const menuObserver=new MutationObserver(()=>renderBasket());menuObserver.observe($('grid'),{childList:true});
   rpc('rw_get_wheels').then(data=>{wheels=data;wheelSelect.replaceChildren(...wheels.map(w=>el('option',{value:w.id},w.name)));renderBasket();}).catch(()=>{manualMsg.textContent='Could not load wheels. Refresh this page to retry.';});
   renderBasket();renderHistory();syncAccess();readOrderLink();

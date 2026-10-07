@@ -1,4 +1,5 @@
-#customer-order{scroll-margin-top:100px}#customer-order .card2,#staffOrders,#ownerRewardCodes{border:1px solid var(--line);border-radius:16px;padding:24px;background:var(--panel)}
+#customer-order,#staffOrders{scroll-margin-top:100px}#customer-order .card2,#staffOrders,#ownerRewardCodes{border:1px solid var(--line);border-radius:16px;padding:24px;background:var(--panel)}
+#staffOrderAlert{margin:12px 0}#staffOrderAlert[hidden]{display:none!important}
 .gw-order-layout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px}.gw-order-layout h3{margin-bottom:16px}
 #customerOrderForm{display:grid;gap:14px}#customerOrderForm label{display:grid;gap:6px;font-size:.88rem}#customerOrderForm input{width:100%;box-sizing:border-box}
 #customer-order input,#staffOrders input,#staffOrders select,#ownerRewardCodes input,#ownerRewardCodes select{min-height:44px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;color:var(--text);background:var(--panel2);font:inherit;box-sizing:border-box}
